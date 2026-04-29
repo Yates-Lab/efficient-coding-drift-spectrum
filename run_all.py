@@ -1,42 +1,42 @@
 #%%
-"""
-Run all validation tests and generate all four figures.
-
-Order:
-  1. validate.py              - optimizer & spectrum tests
-  2. validate_phase.py        - minimum-phase reconstruction tests
-  3. fig1_filter_magnitude.py - |v*_D(k, omega)|^2 heatmaps
-  4. fig2_temporal_kernels.py - v*_D(k, t) at representative k
-  5. fig3_info_vs_drift.py    - I(D) curve with D* and fixed-filter baselines
-  6. fig4_scaling.py          - empirical k_max, omega_max scaling
-"""
+"""Run all tests and generate all figures."""
 
 import subprocess
 import sys
+from pathlib import Path
 
-SCRIPTS = [
-    "validate.py",
-    "validate_phase.py",
-    "fig1_input_and_filter.py",
-    "fig2_temporal_kernels.py",
-    "fig3_info_vs_drift.py",
-    "fig4_scaling.py",
-]
+ROOT = Path(__file__).parent
 
+print("=" * 60)
+print("Running tests")
+print("=" * 60)
+result = subprocess.run(
+    [sys.executable, "-m", "pytest", "tests/", "-v"],
+    cwd=ROOT,
+)
+if result.returncode != 0:
+    print("Tests failed.")
+    sys.exit(1)
 
-def main():
-    for script in SCRIPTS:
-        print(f"\n{'='*60}\n== {script}\n{'='*60}")
-        result = subprocess.run(
-            [sys.executable, script],
-            capture_output=False,
-        )
-        if result.returncode != 0:
-            print(f"\n{script} failed with code {result.returncode}")
-            sys.exit(result.returncode)
+print("\n" + "=" * 60)
+print("Generating figures")
+print("=" * 60)
+for fig in [
+    "figures/fig1_power_spectra.py",
+    "figures/fig2_optimal_filter.py",
+    "figures/fig3_aliasing.py",
+    "figures/fig4_kernels.py",
+    "figures/fig5_information_vs_D.py",
+    "figures/fig6_kernel_slices.py",
+]:
+    print(f"\n>>> {fig}")
+    r = subprocess.run([sys.executable, fig], cwd=ROOT)
+    if r.returncode != 0:
+        print(f"Failed: {fig}")
+        sys.exit(1)
 
-
-if __name__ == "__main__":
-    main()
+print("\n" + "=" * 60)
+print("Done. Outputs in outputs/.")
+print("=" * 60)
 
 # %%

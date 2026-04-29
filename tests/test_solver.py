@@ -16,7 +16,8 @@ import numpy as np
 import pytest
 
 import sys
-sys.path.insert(0, "/home/claude/efficient_coding")
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.solver import (
     optimal_filter_squared_magnitude,

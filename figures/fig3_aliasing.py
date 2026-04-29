@@ -15,7 +15,8 @@ Bottom row: optimal filter |v*|^2 with and without aliasing, and the
 from __future__ import annotations
 
 import sys
-sys.path.insert(0, "/home/claude/efficient_coding")
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -172,7 +173,7 @@ def fig3():
         y=0.97, fontsize=10.5,
     )
 
-    out = "/home/claude/efficient_coding/outputs/fig3_aliasing.png"
+    out = "outputs/fig3_aliasing.png"
     fig.savefig(out)
     plt.close(fig)
     print(f"wrote {out}")

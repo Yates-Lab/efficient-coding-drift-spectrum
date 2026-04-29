@@ -13,7 +13,8 @@ movement-induced cross-over (ω = D f^2 for drift, ω = s f for linear motion).
 from __future__ import annotations
 
 import sys
-sys.path.insert(0, "/home/claude/efficient_coding")
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -125,7 +126,7 @@ def fig1():
         y=0.97, fontsize=10.5,
     )
 
-    out = "/home/claude/efficient_coding/outputs/fig1_power_spectra.png"
+    out = "outputs/fig1_power_spectra.png"
     fig.savefig(out)
     plt.close(fig)
     print(f"wrote {out}")

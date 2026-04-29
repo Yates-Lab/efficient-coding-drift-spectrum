@@ -21,7 +21,8 @@ D = 5 throughout. σ_in levels are 0.1 (low) and 0.5 (medium). Slices:
 from __future__ import annotations
 
 import sys
-sys.path.insert(0, "/home/claude/efficient_coding")
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -187,7 +188,7 @@ def fig6():
         y=0.985, fontsize=10.5,
     )
 
-    out = "/home/claude/efficient_coding/outputs/fig6_kernel_slices.png"
+    out = "outputs/fig6_kernel_slices.png"
     fig.savefig(out)
     plt.close(fig)
     print(f"wrote {out}")

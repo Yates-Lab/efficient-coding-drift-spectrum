@@ -17,7 +17,8 @@ panels.
 from __future__ import annotations
 
 import sys
-sys.path.insert(0, "/home/claude/efficient_coding")
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -166,7 +167,7 @@ def fig2():
         y=0.985, fontsize=10.5,
     )
 
-    out = "/home/claude/efficient_coding/outputs/fig2_optimal_filter.png"
+    out = "outputs/fig2_optimal_filter.png"
     fig.savefig(out)
     plt.close(fig)
     print(f"wrote {out}")

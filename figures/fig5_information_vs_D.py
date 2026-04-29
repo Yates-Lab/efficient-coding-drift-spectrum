@@ -10,7 +10,8 @@ both versions.
 from __future__ import annotations
 
 import sys
-sys.path.insert(0, "/home/claude/efficient_coding")
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -117,7 +118,7 @@ def fig5():
         y=0.97, fontsize=10.5,
     )
 
-    out = "/home/claude/efficient_coding/outputs/fig5_information_vs_D.png"
+    out = "outputs/fig5_information_vs_D.png"
     fig.savefig(out)
     plt.close(fig)
     print(f"wrote {out}")

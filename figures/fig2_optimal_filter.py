@@ -1,31 +1,24 @@
-"""Figure 2: full optimal filter |v*(f, ω)|^2, direct vs per-cell-aliased input.
+"""Figure 2: optimal filter |v*(f, ω)|^2 on the (f, ω) plane.
 
-For a fixed retinal budget P_0, fixed band B, and a power-law image, we
-solve the efficient-coding problem at four drift conditions and at four
-input-noise levels — twice. The "direct" version uses C(f, ω) as the input
-spectrum; the "aliased" version uses C^sample(f, ω), the per-cell-Nyquist
-folded version that is what each cell actually sees in a Nyquist-matched
-mosaic. Aliasing folds copies of the low-spatial-frequency power into
-every cell's band, which raises the apparent SNR; this is reflected in the
-larger I^* values in the aliased rows.
+Two parameter sweeps for a fixed retinal budget P_0, fixed band B, and a
+power-law image:
+  Row 1: vary drift coefficient D at fixed σ_in.
+  Row 2: vary input noise σ_in at fixed D.
 
 Each panel reports the achieved I^* in nats; white dotted lines mark the
-band edges. The optimal filter is taken on the same (f, ω) grid in all
-panels.
+band edges.
 """
 
 from __future__ import annotations
 
 import sys
-from pathlib import Path
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, ".")
 
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 
 from src.spectra import drift_spectrum
-from src.aliasing import per_cell_aliased_spectrum
 from src.solver import solve_efficient_coding
 from src.plotting import setup_style, radial_weights, band_mask_radial
 from src.params import F_MAX, OMEGA_MIN, OMEGA_MAX, hi_res_grid
@@ -33,20 +26,16 @@ from src.params import F_MAX, OMEGA_MIN, OMEGA_MAX, hi_res_grid
 setup_style()
 
 
-def _solve_grid(f, omega, D, beta, sigma_in, sigma_out, P0, aliased=False):
+def _solve_grid(f, omega, D, beta, sigma_in, sigma_out, P0):
     F = f[:, None]
     W = omega[None, :]
-    base = lambda f_, om: drift_spectrum(f_, om, D=D, beta=beta)
-    if aliased:
-        C = per_cell_aliased_spectrum(base, F, W, m_max=12)
-    else:
-        C = base(F, W)
+    C = drift_spectrum(F, W, D=D, beta=beta)
     weights = radial_weights(f, omega)
     mask = band_mask_radial(f, omega, F_MAX, OMEGA_MIN, OMEGA_MAX)
     weights = weights * mask
     v_sq, lam, I = solve_efficient_coding(C, sigma_in, sigma_out, P0,
                                           weights, band_mask=mask)
-    return C, v_sq, lam, I, mask
+    return v_sq, I, mask
 
 
 def fig2():
@@ -56,60 +45,47 @@ def fig2():
     sigma_out = 1.0
     P0 = 50.0
 
-    sigma_in_fixed = 0.3
-    D_sweep = [0.05, 0.5, 5.0, 50.0]
+    sigma_in_fixed = 1.0
+    D_sweep = np.geomspace(0.05, 50.0, 6)
+
     D_fixed = 5.0
-    sigma_in_sweep = [0.05, 0.2, 0.6, 2.0]
+    sigma_in_sweep = np.geomspace(0.05, 2.0, 6)
 
-    fig, axes = plt.subplots(4, 4, figsize=(9.6, 9.4), sharex=True, sharey=True,
-                             gridspec_kw={"hspace": 0.50, "wspace": 0.18,
-                                          "left": 0.10, "right": 0.91,
-                                          "top": 0.94, "bottom": 0.06})
+    fig, axes = plt.subplots(2, 6, figsize=(12.5, 5.0), sharex=True, sharey=True,
+                             gridspec_kw={"hspace": 0.40, "wspace": 0.16,
+                                          "left": 0.07, "right": 0.93,
+                                          "top": 0.90, "bottom": 0.10})
 
-    # Compute everything
-    rows = []
-    for aliased_flag in [False, True]:
-        for D in D_sweep:
-            r = _solve_grid(f, omega, D, beta=2.0, sigma_in=sigma_in_fixed,
-                            sigma_out=sigma_out, P0=P0,
-                            aliased=aliased_flag)
-            rows.append(("D", aliased_flag, D, r))
-    for aliased_flag in [False, True]:
-        for sin in sigma_in_sweep:
-            r = _solve_grid(f, omega, D_fixed, beta=2.0, sigma_in=sin,
-                            sigma_out=sigma_out, P0=P0,
-                            aliased=aliased_flag)
-            rows.append(("sigma_in", aliased_flag, sin, r))
+    row1 = []
+    for D in D_sweep:
+        v_sq, I, mask = _solve_grid(f, omega, D, beta=2.0,
+                                    sigma_in=sigma_in_fixed,
+                                    sigma_out=sigma_out, P0=P0)
+        row1.append((D, v_sq, I, mask))
+
+    row2 = []
+    for sin in sigma_in_sweep:
+        v_sq, I, mask = _solve_grid(f, omega, D_fixed, beta=2.0,
+                                    sigma_in=sin,
+                                    sigma_out=sigma_out, P0=P0)
+        row2.append((sin, v_sq, I, mask))
 
     cmap = "viridis"
 
-    # Determine row-shared color limits
-    def lims(triplets, floor=1e-5):
-        v = np.concatenate([t[3][1].flatten() for t in triplets])
+    def lims(rows, floor=1e-5):
+        v = np.concatenate([r[1].flatten() for r in rows])
         v = v[np.isfinite(v) & (v > 0)]
         return floor * v.max(), v.max()
 
-    rows_D_direct  = [r for r in rows if r[0] == "D" and r[1] is False]
-    rows_D_alias   = [r for r in rows if r[0] == "D" and r[1] is True]
-    rows_S_direct  = [r for r in rows if r[0] == "sigma_in" and r[1] is False]
-    rows_S_alias   = [r for r in rows if r[0] == "sigma_in" and r[1] is True]
-
-    vmin_D_direct, vmax_D_direct = lims(rows_D_direct)
-    vmin_D_alias, vmax_D_alias = lims(rows_D_alias)
-    vmin_S_direct, vmax_S_direct = lims(rows_S_direct)
-    vmin_S_alias, vmax_S_alias = lims(rows_S_alias)
-
-    def _panel(ax, v_sq, vmin, vmax, mask, title):
+    def panel(ax, v_sq, vmin, vmax, mask, title):
         v_disp = np.where(mask, v_sq, vmin)
         v_disp = np.maximum(v_disp, vmin)
         i_pos = omega > 0
         levels = np.geomspace(vmin, vmax, 24)
-        ax.contourf(
-            f, omega[i_pos], v_disp[:, i_pos].T,
-            levels=levels,
-            norm=mpl.colors.LogNorm(vmin=vmin, vmax=vmax),
-            cmap=cmap, extend="both",
-        )
+        ax.contourf(f, omega[i_pos], v_disp[:, i_pos].T,
+                    levels=levels,
+                    norm=mpl.colors.LogNorm(vmin=vmin, vmax=vmax),
+                    cmap=cmap, extend="both")
         ax.set_xscale("log")
         ax.set_yscale("log")
         ax.set_xlim(f.min(), f.max())
@@ -117,41 +93,29 @@ def fig2():
         ax.axvline(F_MAX, color="white", lw=0.5, ls=":")
         ax.axhline(OMEGA_MIN, color="white", lw=0.5, ls=":")
         ax.axhline(OMEGA_MAX, color="white", lw=0.5, ls=":")
-        ax.set_title(title, pad=2)
+        ax.set_title(title, pad=2, fontsize=8.5)
 
-    # Row 0: D-sweep direct
-    for ax, (_, _, D, (_, v_sq, _, I, mask)) in zip(axes[0], rows_D_direct):
-        _panel(ax, v_sq, vmin_D_direct, vmax_D_direct, mask,
-               rf"$D = {D:g}$,  $I^* = {I:.2f}$")
-    # Row 1: D-sweep aliased
-    for ax, (_, _, D, (_, v_sq, _, I, mask)) in zip(axes[1], rows_D_alias):
-        _panel(ax, v_sq, vmin_D_alias, vmax_D_alias, mask,
-               rf"$D = {D:g}$,  $I^* = {I:.2f}$")
-    # Row 2: σ_in-sweep direct
-    for ax, (_, _, sin, (_, v_sq, _, I, mask)) in zip(axes[2], rows_S_direct):
-        _panel(ax, v_sq, vmin_S_direct, vmax_S_direct, mask,
-               rf"$\sigma_\mathrm{{in}} = {sin:g}$,  $I^* = {I:.2f}$")
-    # Row 3: σ_in-sweep aliased
-    for ax, (_, _, sin, (_, v_sq, _, I, mask)) in zip(axes[3], rows_S_alias):
-        _panel(ax, v_sq, vmin_S_alias, vmax_S_alias, mask,
-               rf"$\sigma_\mathrm{{in}} = {sin:g}$,  $I^* = {I:.2f}$")
+    vmin1, vmax1 = lims(row1)
+    for ax, (D, v_sq, I, mask) in zip(axes[0], row1):
+        panel(ax, v_sq, vmin1, vmax1, mask,
+              rf"$D = {D:.2g}$,  $I^* = {I:.2f}$")
+
+    vmin2, vmax2 = lims(row2)
+    for ax, (sin, v_sq, I, mask) in zip(axes[1], row2):
+        panel(ax, v_sq, vmin2, vmax2, mask,
+              rf"$\sigma_\mathrm{{in}} = {sin:.2g}$,  $I^* = {I:.2f}$")
 
     for ax in axes[-1]:
-        ax.set_xlabel(r"$f$ (cycles/unit)")
+        ax.set_xlabel(r"$f$ (cyc/u)")
     for row in axes:
         row[0].set_ylabel(r"$\omega$ (rad/s)")
 
-    # Banner labels
-    fig.text(0.02, 0.85, "vary $D$\n(direct)", rotation=90,
-             fontsize=9, va="center", ha="center")
-    fig.text(0.02, 0.62, "vary $D$\n(aliased)", rotation=90,
-             fontsize=9, va="center", ha="center")
-    fig.text(0.02, 0.385, "vary $\\sigma_\\mathrm{in}$\n(direct)",
+    fig.text(0.02, 0.69, rf"vary $D$" + "\n" + rf"$\sigma_\mathrm{{in}}={sigma_in_fixed}$",
              rotation=90, fontsize=9, va="center", ha="center")
-    fig.text(0.02, 0.155, "vary $\\sigma_\\mathrm{in}$\n(aliased)",
+    fig.text(0.02, 0.27, rf"vary $\sigma_\mathrm{{in}}$" + "\n" + rf"$D={D_fixed}$",
              rotation=90, fontsize=9, va="center", ha="center")
 
-    cbar_ax = fig.add_axes([0.93, 0.10, 0.012, 0.78])
+    cbar_ax = fig.add_axes([0.945, 0.13, 0.012, 0.74])
     cb = mpl.colorbar.ColorbarBase(
         cbar_ax,
         cmap=plt.get_cmap(cmap),
@@ -159,12 +123,12 @@ def fig2():
         orientation="vertical",
         extend="min",
     )
-    cb.set_label(r"$|v^*(f,\omega)|^2 / \max |v^*|^2$  (per-row)")
+    cb.set_label(r"$|v^\star|^2 / \max |v^\star|^2$ (per row)")
     cb.ax.tick_params(direction="out", labelsize=7)
 
     fig.suptitle(
-        r"Optimal filter $|v^\star(f,\omega)|^2$: direct vs per-cell-Nyquist aliased",
-        y=0.985, fontsize=10.5,
+        r"Optimal spatiotemporal filter $|v^\star(f,\omega)|^2$ under drift",
+        y=0.97, fontsize=10.5,
     )
 
     out = "outputs/fig2_optimal_filter.png"

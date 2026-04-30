@@ -13,8 +13,7 @@ movement-induced cross-over (ω = D f^2 for drift, ω = s f for linear motion).
 from __future__ import annotations
 
 import sys
-from pathlib import Path
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, ".")
 
 import numpy as np
 import matplotlib.pyplot as plt

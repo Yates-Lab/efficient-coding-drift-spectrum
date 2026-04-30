@@ -388,77 +388,126 @@ class DriftPlusSaccadeSpectrum(Spectrum):
 # Boi et al. cycle spectra (non-stationary regime model)
 # ---------------------------------------------------------------------------
 
+def truncated_normal_quantiles(mean=4.4, sd=1.3, lo=1.0, hi=10.0, n=96):
+    """Deterministic quadrature points for a truncated normal."""
+    from scipy.stats import truncnorm
+
+    q = (np.arange(n, dtype=float) + 0.5) / n
+    a = (lo - mean) / sd
+    b = (hi - mean) / sd
+    return truncnorm.ppf(q, a, b, loc=mean, scale=sd)
+
+
+def main_sequence_duration(A, base_ms=21.0, slope_ms_per_deg=2.2):
+    """Linear human-saccade duration in seconds (Bahill main-sequence)."""
+    A = np.asarray(A, dtype=float)
+    return 1e-3 * (base_ms + slope_ms_per_deg * A)
+
+
+def minimum_jerk_step(t, duration, center=0.0):
+    """Unit-amplitude minimum-jerk displacement (10s^3-15s^4+6s^5)."""
+    t = np.asarray(t, dtype=float)
+    onset = center - duration / 2.0
+    s = (t - onset) / duration
+    u = np.zeros_like(t)
+    mid = (s > 0.0) & (s < 1.0)
+    u[s >= 1.0] = 1.0
+    sm = s[mid]
+    u[mid] = 10.0 * sm ** 3 - 15.0 * sm ** 4 + 6.0 * sm ** 5
+    return u
+
+
+def unit_step_temporal_envelopes(
+    omega, durations, *,
+    T_win=0.512, n_t=2048, n_fft=8192, smooth_floor=1e-30,
+):
+    """E(omega; T_i) periodogram of demeaned minimum-jerk steps in T_win.
+
+    Returns shape (n_durations, n_omega).
+    """
+    omega = np.atleast_1d(np.asarray(omega, dtype=float)).ravel()
+    durations = np.atleast_1d(np.asarray(durations, dtype=float)).ravel()
+    n_fft = int(max(n_fft, n_t))
+    if n_fft % 2:
+        n_fft += 1
+
+    dt = T_win / n_t
+    t = (np.arange(n_t) - n_t // 2) * dt
+    omega_native = 2.0 * np.pi * np.fft.fftfreq(n_fft, d=dt)
+    pos = omega_native >= 0
+    omega_pos = omega_native[pos]
+    order = np.argsort(omega_pos)
+    omega_pos = omega_pos[order]
+    wq = np.abs(omega)
+
+    E = np.empty((durations.size, omega.size), dtype=float)
+    for i, dur in enumerate(durations):
+        u = minimum_jerk_step(t, float(dur), center=0.0)
+        u = u - u.mean()
+        U = np.fft.fft(u, n=n_fft) * dt
+        P = (np.abs(U[pos]) ** 2) / T_win
+        P = np.maximum(P[order], smooth_floor)
+        E[i] = np.interp(wq, omega_pos, P, left=0.0, right=0.0)
+    return E
+
+
+def analytic_transient_envelopes(
+    omega, durations, *,
+    T_win=0.512, low_factor=1.0, high_factor=1.25, high_order=4.0,
+):
+    """Smooth analytic surrogate for |FT[unit displacement transient]|^2.
+
+    1/(omega^2 + omega_low^2) low-frequency floor with a high-order
+    high-frequency roll-off at omega_high = high_factor * 2π / duration.
+    """
+    omega = np.abs(np.atleast_1d(np.asarray(omega, dtype=float)).ravel())
+    durations = np.atleast_1d(np.asarray(durations, dtype=float)).ravel()
+    omega_low = low_factor * 2.0 * np.pi / T_win
+    omega_high = high_factor * 2.0 * np.pi / durations[:, None]
+    w = omega[None, :]
+    E = 1.0 / (w * w + omega_low * omega_low)
+    E = E / (1.0 + (w / omega_high) ** high_order)
+    return E
+
+
 def _windowed_saccade_redistribution(
     f, omega, A, T_win=0.512,
-    peak_time=0.040, zeta=0.6, n_t=4096,
+    peak_time=0.040, zeta=0.6, n_t=4096, n_orient=24,
 ):
-    """Windowed-FT redistribution for a single saccade event.
+    """Orientation-averaged windowed-FT power for a single saccade event.
 
-    Following Boi et al. 2017 supplementary procedure: each saccade is
-    placed at the center of a T_win-second window in which the eye is
-    otherwise immobile, and the spectrum of the resulting transient
-    is computed.
+    Computes
+        Q(f, ω) = < |FT_t[ exp(-i 2π f A u(t) cos θ) - mean_t(...) ]|^2 >_θ / T_win
+    where θ is uniform on [0, 2π) (n_orient samples) and u(t) is the
+    `saccade_template` placed at the center of a T_win-second window.
 
-    Angle-averaging the phase factor exp(-2πi k · A u(t) e_hat) over the
-    saccade direction e_hat (uniform on the unit circle) gives
-    J_0(2π k A u(t)). Subtracting the time-mean (which would only
-    contribute to ω = 0, outside our band):
-
-        Q_early(k, ω) = | FT_t [ J_0(2π k A u(t)) - <J_0> ] |^2 / T_win
-
-    The result is non-negative by the |·|^2 construction, finite, and
-    captures the post-saccade plateau (u → 1 holds inside the window
-    after the saccade transient).
-
-    Parameters
-    ----------
-    f : 1D array of spatial frequencies (cycles / length).
-    omega : 1D centered uniform array of angular frequencies (rad / s).
-    A : float, saccade amplitude (length units).
-    T_win : float, window duration (s).
-    peak_time, zeta : saccade template shape parameters.
-    n_t : int, time-samples in the window. dt = T_win / n_t; pick large
-          enough that 2π/(2 dt) covers omega.max() (Nyquist).
-
-    Returns
-    -------
-    Q : ndarray, shape (len(f), len(omega))
+    This averages Fourier *powers* across saccade orientations, not the
+    Fourier power of an orientation-averaged Bessel trace.
     """
-    from scipy.special import j0
-
     f_arr = np.atleast_1d(np.asarray(f, dtype=float)).ravel()
     omega_arr = np.atleast_1d(np.asarray(omega, dtype=float)).ravel()
 
-    # Time grid: dense, centered on saccade onset at t=0.
     dt = T_win / n_t
-    # Place saccade onset at t=0, centered in window from -T_win/2 to T_win/2.
     t = (np.arange(n_t) - n_t // 2) * dt
-
-    # Saccade trajectory u(t): 0 for t<0, transient toward 1 for t>0.
     u = saccade_template(t, peak_time=peak_time, zeta=zeta)  # (n_t,)
 
-    # Angle-averaged phase factor: J_0(2π k A u(t)). Shape (Nf, n_t).
-    j0_factor = j0(2.0 * np.pi * f_arr[:, None] * A * u[None, :])
+    thetas = (np.arange(n_orient, dtype=float) + 0.5) / n_orient * 2.0 * np.pi
+    cos_th = np.cos(thetas)
 
-    # Subtract time-mean (DC suppression: ω=0 carries the static-image
-    # plateau, not a transient signal of interest).
-    j0_factor = j0_factor - j0_factor.mean(axis=1, keepdims=True)
-
-    # Centered-time FFT: shift to put t=0 at index 0 before FFT,
-    # then fftshift in omega afterwards.
-    g = np.fft.ifftshift(j0_factor, axes=1)
-    G = np.fft.fft(g, axis=1) * dt  # FT in (rad/s) convention, per dt
-    G = np.fft.fftshift(G, axes=1)
-
-    # Native FFT omega grid (centered).
     domega_native = 2.0 * np.pi / (n_t * dt)
     omega_native = (np.arange(n_t) - n_t // 2) * domega_native
 
-    # Power spectral density: |G|^2 / T_win has units of (length-units)^2
-    # per (rad/s); multiplied later by C_I, gives the input spectrum.
-    P_native = (np.abs(G) ** 2) / T_win  # (Nf, n_t)
+    P_native = np.zeros((f_arr.size, n_t), dtype=float)
+    twopi_fA = 2.0 * np.pi * f_arr[:, None] * A  # (Nf, 1)
+    for c in cos_th:
+        phase = np.exp(-1j * twopi_fA * c * u[None, :])  # (Nf, n_t)
+        phase = phase - phase.mean(axis=1, keepdims=True)
+        g = np.fft.ifftshift(phase, axes=1)
+        G = np.fft.fft(g, axis=1) * dt
+        G = np.fft.fftshift(G, axes=1)
+        P_native += (np.abs(G) ** 2) / T_win
+    P_native /= n_orient
 
-    # Interpolate onto requested omega grid.
     Q = np.empty((f_arr.size, omega_arr.size), dtype=float)
     for i in range(f_arr.size):
         Q[i] = np.interp(omega_arr, omega_native, P_native[i],
@@ -523,6 +572,88 @@ class BoiCycleLateSpectrum(Spectrum):
         return self.image.C(f_arr)[:, None] * self.redistribution(f_arr, omega)
 
 
+@dataclass(frozen=True)
+class BoiEarlyCleanApprox(Spectrum):
+    """Clean early-fixation / saccade-transient approximation.
+
+    Q_early(f, ω) = < 2 [1 - J_0(2π f A)] · E(ω; T(A)) >_A
+    with amplitudes drawn from a truncated normal and durations from
+    a main-sequence relation. Multiplied by the image factor in C().
+    """
+    mean_A: float = 4.4
+    sd_A: float = 1.3
+    A_min: float = 1.0
+    A_max: float = 10.0
+    n_amp: int = 96
+    T_win: float = 0.512
+    n_t: int = 2048
+    n_fft: int = 8192
+    temporal_model: str = "analytic"  # "analytic" or "fft"
+    image: ImageParams = DEFAULT_IMAGE
+
+    def __post_init__(self):
+        object.__setattr__(self, "name", "boi_early_clean")
+        object.__setattr__(self, "reference", "Boi et al. 2017 (clean approximation)")
+
+    def amplitudes(self) -> np.ndarray:
+        return truncated_normal_quantiles(
+            self.mean_A, self.sd_A, self.A_min, self.A_max, self.n_amp
+        )
+
+    def redistribution(self, f, omega) -> np.ndarray:
+        from scipy.special import j0
+
+        f_arr = np.atleast_1d(np.asarray(f, dtype=float)).ravel()
+        omega_arr = np.atleast_1d(np.asarray(omega, dtype=float)).ravel()
+        A = self.amplitudes()
+        durations = main_sequence_duration(A)
+        H = 2.0 * (1.0 - j0(2.0 * np.pi * f_arr[:, None] * A[None, :]))
+        if self.temporal_model == "fft":
+            E = unit_step_temporal_envelopes(
+                omega_arr, durations,
+                T_win=self.T_win, n_t=self.n_t, n_fft=self.n_fft,
+            )
+        elif self.temporal_model == "analytic":
+            E = analytic_transient_envelopes(
+                omega_arr, durations, T_win=self.T_win,
+            )
+        else:
+            raise ValueError("temporal_model must be 'analytic' or 'fft'")
+        return (H @ E) / A.size
+
+    def C(self, f, omega) -> np.ndarray:
+        f_arr = np.atleast_1d(np.asarray(f, dtype=float)).ravel()
+        return self.image.C(f_arr)[:, None] * self.redistribution(f_arr, omega)
+
+
+@dataclass(frozen=True)
+class BoiLateDriftApprox(Spectrum):
+    """Late-fixation / Brownian drift approximation with cycles-aware phase.
+
+    a(f) = D · (2π f)^2 when f_is_cycles=True, else D · f^2. Returns the
+    standard 2 a / (a^2 + ω^2) Lorentzian times the image factor.
+    """
+    D: float = 0.05
+    f_is_cycles: bool = True
+    image: ImageParams = DEFAULT_IMAGE
+
+    def __post_init__(self):
+        object.__setattr__(self, "name", "boi_late_clean")
+        object.__setattr__(self, "reference", "Boi et al. 2017 (clean approximation)")
+
+    def redistribution(self, f, omega) -> np.ndarray:
+        f_arr = np.atleast_1d(np.asarray(f, dtype=float)).ravel()
+        omega_arr = np.atleast_1d(np.asarray(omega, dtype=float)).ravel()
+        spatial = 2.0 * np.pi * f_arr if self.f_is_cycles else f_arr
+        a = self.D * spatial[:, None] ** 2
+        w = omega_arr[None, :]
+        return 2.0 * a / (a * a + w * w)
+
+    def C(self, f, omega) -> np.ndarray:
+        f_arr = np.atleast_1d(np.asarray(f, dtype=float)).ravel()
+        return self.image.C(f_arr)[:, None] * self.redistribution(f_arr, omega)
+
+
 __all__ = [
     # Free functions (legacy)
     "image_spectrum",
@@ -544,4 +675,6 @@ __all__ = [
     "DriftPlusSaccadeSpectrum",
     "BoiCycleEarlySpectrum",
     "BoiCycleLateSpectrum",
+    "BoiEarlyCleanApprox",
+    "BoiLateDriftApprox",
 ]

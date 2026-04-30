@@ -270,3 +270,79 @@ def test_describe_drift_plus_saccade_full():
     desc = s.describe()
     for token in ["D=1.5", "A=2.5", "lam=3.0"]:
         assert token in desc
+
+
+# ---------------------------------------------------------------------------
+# BoiEarlyCleanApprox / BoiLateDriftApprox (corrected clean approximations)
+# ---------------------------------------------------------------------------
+
+def test_boi_early_clean_approx_shape_and_factorization():
+    """C = I(f) * Q for the clean approximation."""
+    from src.spectra import BoiEarlyCleanApprox
+    f = np.geomspace(0.05, 5.0, 30)
+    omega = np.linspace(-200, 200, 256)
+    s = BoiEarlyCleanApprox()
+    C = s.C(f, omega)
+    Q = s.redistribution(f, omega)
+    CI = image_spectrum(f)
+    assert C.shape == (30, 256)
+    np.testing.assert_allclose(C, CI[:, None] * Q, rtol=1e-12)
+
+
+def test_boi_early_clean_approx_low_f_whitening_high_f_saturation():
+    """At low f (well below 1/(2*A_mean)) S should be ~ flat in f; at high
+    f (in the saturation regime) S should follow the f^-2 image slope."""
+    from src.spectra import BoiEarlyCleanApprox
+    s = BoiEarlyCleanApprox()
+    f = np.geomspace(0.05, 4.0, 60)
+    omega = np.linspace(-200, 200, 512)
+    S = s.C(f, omega)
+    in_b = (np.abs(omega) > 5) & (np.abs(omega) < 100)
+    Pf = S[:, in_b].sum(axis=1)
+    slope_lo = np.polyfit(np.log(f[:10]), np.log(Pf[:10]), 1)[0]
+    slope_hi = np.polyfit(np.log(f[-10:]), np.log(Pf[-10:]), 1)[0]
+    assert abs(slope_lo) < 0.5, f"low-f slope should be ~0, got {slope_lo}"
+    assert -2.2 < slope_hi < -1.6, f"high-f slope should be ~-2, got {slope_hi}"
+
+
+def test_boi_late_drift_approx_matches_drift_lorentzian_with_2pi():
+    """BoiLateDriftApprox(f_is_cycles=True) is drift_lorentzian with
+    a = D * (2*pi*f)^2 (cycles-to-radians conversion)."""
+    from src.spectra import BoiLateDriftApprox, drift_lorentzian
+    f = np.geomspace(0.1, 4.0, 30)
+    omega = np.geomspace(0.5, 400, 30)
+    D = 0.05
+    Q = BoiLateDriftApprox(D=D, f_is_cycles=True).redistribution(f, omega)
+    D_eff = D * (2.0 * np.pi) ** 2
+    ref = drift_lorentzian(f[:, None], omega[None, :], D_eff)
+    np.testing.assert_allclose(Q, ref, atol=1e-14)
+
+
+def test_corrected_orientation_estimator_differs_from_old_pattern():
+    """The corrected <|FT|^2>_theta result should NOT equal the old
+    |FT[<.>_theta]|^2 = |FT[J_0(...)]|^2 result. Sanity guard against
+    accidentally restoring the broken averaging order."""
+    from src.spectra import _windowed_saccade_redistribution, saccade_template
+    from scipy.special import j0
+    f = np.geomspace(0.1, 4.0, 12)
+    omega = np.linspace(-200, 200, 41)
+    A = 4.4
+    T_win = 0.512
+    n_t = 4096
+    new_Q = _windowed_saccade_redistribution(f, omega, A=A, T_win=T_win, n_t=n_t)
+    dt = T_win / n_t
+    t = (np.arange(n_t) - n_t // 2) * dt
+    u = saccade_template(t)
+    j0_factor = j0(2.0 * np.pi * f[:, None] * A * u[None, :])
+    j0_factor = j0_factor - j0_factor.mean(axis=1, keepdims=True)
+    g = np.fft.ifftshift(j0_factor, axes=1)
+    G = np.fft.fft(g, axis=1) * dt
+    G = np.fft.fftshift(G, axes=1)
+    old_P = (np.abs(G) ** 2) / T_win
+    domega = 2.0 * np.pi / (n_t * dt)
+    om_native = (np.arange(n_t) - n_t // 2) * domega
+    old_Q = np.empty((f.size, omega.size))
+    for i in range(f.size):
+        old_Q[i] = np.interp(omega, om_native, old_P[i], left=0.0, right=0.0)
+    assert not np.allclose(new_Q, old_Q), "Corrected estimator must differ from |FT[<·>_θ]|^2"
+    assert np.max(np.abs(new_Q - old_Q)) > 1e-3

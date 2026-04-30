@@ -26,6 +26,8 @@ for fig in [
     "figures/fig3_kernels.py",
     "figures/fig4_information_vs_D.py",
     "figures/fig5_kernel_slices.py",
+    "figures/fig6_saccade_kernels.py",
+    "figures/fig6b_saccade_diagnostics.py",
 ]:
     print(f"\n>>> {fig}")
     r = subprocess.run([sys.executable, fig], cwd=ROOT)

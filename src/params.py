@@ -15,9 +15,9 @@ from __future__ import annotations
 import numpy as np
 
 
-F_MAX = 6.0
-OMEGA_MIN = 0.25
-OMEGA_MAX = 800.0
+F_MAX = 4.0
+OMEGA_MIN = 0.5
+OMEGA_MAX = 400.0
 
 
 def hi_res_grid():
@@ -28,9 +28,9 @@ def hi_res_grid():
     The FFT Nyquist (800 rad/s) is 2× the band ω_max, so no aliasing inside
     the band.
     """
-    f = np.geomspace(0.05, 8.0, 220)
+    f = np.geomspace(0.05, 5.0, 220)
     n_omega = 2048
-    omega_max_grid = 1000.0
+    omega_max_grid = 800.0
     domega = 2.0 * omega_max_grid / n_omega
     omega = (np.arange(n_omega) - n_omega // 2) * domega
     return f, omega

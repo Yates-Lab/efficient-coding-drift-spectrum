@@ -1,16 +1,25 @@
-"""Figure 3: spatial and temporal kernels of the optimal filter.
+"""Figure 6: spatial and temporal kernels of the optimal filter under saccades.
 
-Two summaries of the spatiotemporal optimal filter |v*(f, ω)|^2:
+Mirror of figure 3, but with the input spectrum given by saccades of
+amplitude A acting on a power-law image:
 
-  - Spatial kernel v_s(r): radial cross-section of the 2D inverse Fourier
-    transform of v_s(f) = sqrt((1/2π) ∫ |v*(f,ω)|^2 dω). Symmetric around
-    r = 0.
+    C_sac(f, ω; A) = C_I(f) · Q_sac(f, ω; A),
 
-  - Temporal kernel v_t(t): minimum-phase causal IFT of v_t(ω) =
-    |v*(f*, ω)|, where f* maximises ∫|v*|^2 dω. A soft Tukey taper at
-    the band edges keeps the cepstral reconstruction stable.
+where Q_sac is the angle-averaged redistribution kernel of section
+src.spectra.saccade_redistribution. The damped-harmonic-oscillator
+template (zeta = 0.6, peak at 40 ms) reproduces the saccade traces
+in Mostofi et al. (2020), figure 5A.
 
-Two parameter sweeps: vary D and vary σ_in.
+Two parameter sweeps:
+  vary A from 0.5 to 7 degrees (a microsaccade up to a typical natural
+    saccade), at fixed σ_in.
+  vary σ_in from 0.03 to 2 at a fixed A = 2.5° (the median amplitude in
+    Mostofi et al.'s data).
+
+Spatial kernel: radial cross-section of the 2D inverse Fourier transform
+of v_s(f) = sqrt((1/2π) ∫ |v*(f, ω)|² dω). Symmetric around r = 0.
+Temporal kernel: minimum-phase causal IFT of v_t(ω) = |v*(f*, ω)|, where
+f* maximises ∫ |v*|² dω, with a soft Tukey taper at the band edges.
 """
 
 from __future__ import annotations
@@ -21,7 +30,7 @@ sys.path.insert(0, ".")
 import numpy as np
 import matplotlib.pyplot as plt
 
-from src.spectra import drift_spectrum
+from src.spectra import saccade_spectrum
 from src.solver import solve_efficient_coding
 from src.kernels import (
     spatial_kernel_2d,
@@ -40,10 +49,8 @@ from src.params import F_MAX, OMEGA_MIN, OMEGA_MAX, hi_res_grid
 setup_style()
 
 
-def _solve(f, omega, D, beta, sigma_in, sigma_out, P0):
-    F = f[:, None]
-    W = omega[None, :]
-    C = drift_spectrum(F, W, D=D, beta=beta)
+def _solve(f, omega, A, sigma_in, sigma_out, P0):
+    C = saccade_spectrum(f, omega, A=A)
     weights = radial_weights(f, omega)
     mask = band_mask_radial(f, omega, F_MAX, OMEGA_MIN, OMEGA_MAX)
     weights_b = weights * mask
@@ -79,41 +86,43 @@ def _temporal_kernel(v_sq, f, omega):
     return t, h_t
 
 
-def fig3():
+def fig6():
     f, omega = hi_res_grid()
 
     sigma_out = 1.0
     P0 = 50.0
-    beta = 2.0
 
     sigma_in_fixed = 0.3
-    D_sweep = np.geomspace(0.05, 50.0, 8)
-    D_fixed = 5.0
+    A_sweep = np.geomspace(0.3, 7.0, 8)  # microsaccade to large saccade
+    A_fixed = 2.5
     sigma_in_sweep = np.geomspace(0.03, 2.0, 8)
 
     fig, axes = plt.subplots(2, 2, figsize=(9.0, 6.0),
                              gridspec_kw={"hspace": 0.40, "wspace": 0.30,
                                           "left": 0.08, "right": 0.97,
                                           "top": 0.92, "bottom": 0.10})
-    ax_sp_D, ax_sp_S = axes[0]
-    ax_t_D, ax_t_S = axes[1]
+    ax_sp_A, ax_sp_S = axes[0]
+    ax_t_A, ax_t_S = axes[1]
 
-    palette_D = parameter_palette(len(D_sweep), cmap="viridis")
+    palette_A = parameter_palette(len(A_sweep), cmap="viridis")
     palette_S = parameter_palette(len(sigma_in_sweep), cmap="plasma")
 
-    for D, color in zip(D_sweep, palette_D):
-        v_sq, _ = _solve(f, omega, D, beta, sigma_in_fixed, sigma_out, P0)
+    print("Sweeping A (8 values)...")
+    for i, (A, color) in enumerate(zip(A_sweep, palette_A)):
+        v_sq, I_star = _solve(f, omega, A, sigma_in_fixed, sigma_out, P0)
         r, v_r = _spatial_kernel_radial(v_sq, f, omega)
         v_r_n = v_r / max(np.max(np.abs(v_r)), 1e-30)
-        ax_sp_D.plot(r, v_r_n, color=color, lw=1.3,
-                     label=rf"$D={D:.2g}$")
+        ax_sp_A.plot(r, v_r_n, color=color, lw=1.3,
+                     label=rf"$A={A:.2g}^\circ$")
         t, h_t = _temporal_kernel(v_sq, f, omega)
         h_t_n = h_t / max(np.max(np.abs(h_t)), 1e-30)
-        ax_t_D.plot(t, h_t_n, color=color, lw=1.3,
-                    label=rf"$D={D:.2g}$")
+        ax_t_A.plot(t, h_t_n, color=color, lw=1.3,
+                    label=rf"$A={A:.2g}^\circ$")
+        print(f"  A = {A:.3g} deg, I* = {I_star:.3f} nats")
 
-    for sin, color in zip(sigma_in_sweep, palette_S):
-        v_sq, _ = _solve(f, omega, D_fixed, beta, sin, sigma_out, P0)
+    print("Sweeping sigma_in (8 values)...")
+    for i, (sin, color) in enumerate(zip(sigma_in_sweep, palette_S)):
+        v_sq, I_star = _solve(f, omega, A_fixed, sin, sigma_out, P0)
         r, v_r = _spatial_kernel_radial(v_sq, f, omega)
         v_r_n = v_r / max(np.max(np.abs(v_r)), 1e-30)
         ax_sp_S.plot(r, v_r_n, color=color, lw=1.3,
@@ -122,39 +131,40 @@ def fig3():
         h_t_n = h_t / max(np.max(np.abs(h_t)), 1e-30)
         ax_t_S.plot(t, h_t_n, color=color, lw=1.3,
                     label=rf"$\sigma_\mathrm{{in}}={sin:.2g}$")
+        print(f"  sigma_in = {sin:.3g}, I* = {I_star:.3f} nats")
 
-    for ax in [ax_sp_D, ax_sp_S]:
+    for ax in [ax_sp_A, ax_sp_S]:
         ax.set_xlim(-3.0, 3.0)
         ax.axhline(0.0, color="0.7", lw=0.4)
         ax.axvline(0.0, color="0.85", lw=0.3)
         ax.set_xlabel(r"$r$ (units)")
         ax.set_ylabel(r"$v_s(r) / \max v_s$")
 
-    for ax in [ax_t_D, ax_t_S]:
+    for ax in [ax_t_A, ax_t_S]:
         ax.set_xlim(0.0, 0.6)
         ax.axhline(0.0, color="0.7", lw=0.4)
         ax.set_xlabel(r"$t$ (s)")
         ax.set_ylabel(r"$v_t(t) / \max v_t$")
 
-    ax_sp_D.set_title(rf"Spatial kernel — vary $D$  ($\sigma_\mathrm{{in}}={sigma_in_fixed}$)")
-    ax_sp_S.set_title(rf"Spatial kernel — vary $\sigma_\mathrm{{in}}$  ($D={D_fixed}$)")
-    ax_t_D.set_title(rf"Temporal kernel — vary $D$  ($\sigma_\mathrm{{in}}={sigma_in_fixed}$)")
-    ax_t_S.set_title(rf"Temporal kernel — vary $\sigma_\mathrm{{in}}$  ($D={D_fixed}$)")
+    ax_sp_A.set_title(rf"Spatial kernel — vary $A$  ($\sigma_\mathrm{{in}}={sigma_in_fixed}$)")
+    ax_sp_S.set_title(rf"Spatial kernel — vary $\sigma_\mathrm{{in}}$  ($A={A_fixed}^\circ$)")
+    ax_t_A.set_title(rf"Temporal kernel — vary $A$  ($\sigma_\mathrm{{in}}={sigma_in_fixed}$)")
+    ax_t_S.set_title(rf"Temporal kernel — vary $\sigma_\mathrm{{in}}$  ($A={A_fixed}^\circ$)")
 
     for ax in axes.flat:
         ax.legend(loc="best", handlelength=1.2, fontsize=6.5,
                   frameon=False, ncol=2)
 
     fig.suptitle(
-        "Spatial and temporal kernels of the optimal filter",
+        "Optimal filter under saccades: spatial and temporal kernels",
         y=0.98, fontsize=10.5,
     )
 
-    out = "./outputs/fig3_kernels.png"
+    out = "./outputs/fig6_saccade_kernels.png"
     fig.savefig(out)
     plt.close(fig)
     print(f"wrote {out}")
 
 
 if __name__ == "__main__":
-    fig3()
+    fig6()

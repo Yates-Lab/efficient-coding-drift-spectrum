@@ -153,7 +153,7 @@ def fig5():
         y=0.985, fontsize=10.5,
     )
 
-    out = "outputs/fig5_kernel_slices.png"
+    out = "./outputs/fig5_kernel_slices.png"
     fig.savefig(out)
     plt.close(fig)
     print(f"wrote {out}")

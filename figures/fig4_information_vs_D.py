@@ -67,10 +67,7 @@ def fig4():
 
     for i, (sin, color) in enumerate(zip(sigma_in_levels, palette)):
         I_curve = I_table[i]
-        for uu, ax in enumerate((ax_lin, ax_log)):
-            if uu == 0:
-                I_curve = I_curve / I_curve.max()
-
+        for ax in (ax_lin, ax_log):
             ax.plot(D_grid, I_curve, color=color, lw=1.5,
                     label=rf"$\sigma_\mathrm{{in}}={sin:.2g}$" if ax is ax_lin else None)
             i_peak = int(np.argmax(I_curve))
@@ -99,7 +96,7 @@ def fig4():
         y=0.97, fontsize=10.5,
     )
 
-    out = "outputs/fig4_information_vs_D.png"
+    out = "./outputs/fig4_information_vs_D.png"
     fig.savefig(out)
     plt.close(fig)
     print(f"wrote {out}")

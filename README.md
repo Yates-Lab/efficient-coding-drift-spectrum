@@ -10,9 +10,9 @@ Given a power-law image spectrum
 
     C_I(f) = A / (f^2 + k0^2)^(β/2),
 
-a movement model (Brownian drift, Gaussian linear motion, or both), and a
-fixed band B = { (f, ω) : 0 ≤ f ≤ f_max, ω_min ≤ |ω| ≤ ω_max }, this
-codebase
+a movement model (Brownian drift, Gaussian linear motion, saccades, or a
+combination), and a fixed band B = { (f, ω) : 0 ≤ f ≤ f_max,
+ω_min ≤ |ω| ≤ ω_max }, this codebase
 
 1. constructs the spatiotemporal input spectrum C_θ(f, ω) (`src/spectra.py`);
 2. solves the constrained efficient-coding problem (Linsker / Jun)
@@ -25,6 +25,12 @@ codebase
 3. reconstructs causal minimum-phase temporal kernels and 2D spatial
    kernels from the magnitude solution (`src/kernels.py`).
 
+The saccade redistribution kernel uses a damped-harmonic-oscillator
+template (zeta = 0.6, peak velocity at 40 ms) that reproduces the
+trajectories in Mostofi et al. (2020), Current Biology. The trajectory
+is angle-averaged over saccade direction to match the rotationally-
+symmetric input spectrum.
+
 The optimization is done on the direct (unaliased) spectrum, following
 the appendix's working assumption that the m=0 copy dominates. See the
 *aliasing* note below for caveats.
@@ -33,23 +39,29 @@ the appendix's working assumption that the m=0 copy dominates. See the
 
 ```
 src/
-    spectra.py     drift, Gaussian linear motion, combined spectra
+    spectra.py     drift, Gaussian linear motion, saccade redistribution,
+                   combined drift+motion spectra
     solver.py      KKT solver, mutual information, water-filling reduction
     kernels.py     cepstral min-phase temporal filter, 2D spatial kernel,
                    soft-band Tukey taper
     plotting.py    publication style, log-contour helper, palettes
     params.py      shared band and grid parameters
 tests/
-    test_spectra.py    12 tests
+    test_spectra.py    21 tests (12 drift/linear/combined + 9 saccade)
     test_solver.py     10 tests
     test_kernels.py     8 tests
 figures/
     fig1_power_spectra.py        movement-induced C_θ(f, ω)
     fig2_optimal_filter.py       |v*(f, ω)|^2 across D and σ_in sweeps
     fig3_kernels.py              spatial v_s(r) and temporal v_t(t)
-                                 kernels (ω- and f-integrated)
+                                 kernels under drift
     fig4_information_vs_D.py     I*(D) inverted-U for varying σ_in
     fig5_kernel_slices.py        kernels at fixed ω₀ and f₀ slices
+    fig6_saccade_kernels.py      spatial and temporal kernels under
+                                 saccades, sweeping A and σ_in
+    fig6b_saccade_diagnostics.py  diagnostic: 2D Q kernel, spatial /
+                                 temporal profiles, and saccade-vs-drift
+                                 spectrum comparison
 scripts/
     check_aliasing_negligible.py validation that the m=0 copy assumption
                                  is acceptable for the band/parameters used
@@ -61,12 +73,14 @@ outputs/   PNG artifacts at 320 dpi
 ```bash
 pip install numpy scipy matplotlib pytest
 
-python -m pytest tests/                           # 30 tests, ~3 s
+python -m pytest tests/                           # 39 tests, ~3 s
 python figures/fig1_power_spectra.py
 python figures/fig2_optimal_filter.py
 python figures/fig3_kernels.py
 python figures/fig4_information_vs_D.py
 python figures/fig5_kernel_slices.py
+python figures/fig6_saccade_kernels.py
+python figures/fig6b_saccade_diagnostics.py
 
 python scripts/check_aliasing_negligible.py       # sanity check
 ```
@@ -106,6 +120,49 @@ across all noise levels; D* shifts to higher values as σ_in grows.
 12, 26, 59, 130, 300} rad/s and at fixed f₀ ∈ {0.08, 0.13, 0.23, 0.38,
 0.63, 1.1, 1.8, 3.0} cyc/u, for σ_in ∈ {0.1, 0.5} at D = 5. High-ω₀
 slices broaden in space; high-f₀ slices peak earlier in time.
+
+**Figure 6.** Spatial and temporal kernels of the optimal filter under
+saccades, sweeping amplitude A from 0.3° (microsaccade) to 7° (large
+natural saccade) at fixed σ_in = 0.3, and sweeping σ_in from 0.03 to 2
+at the median amplitude A = 2.5°. The saccade input spectrum is
+C_sac(f, ω; A) = C_I(f) · Q_sac(f, ω; A), where Q_sac is computed via
+direct numerical integration of the angle-averaged template Fourier
+transform.
+
+The spatial kernel barely changes with A — saccade amplitude controls
+which spatial frequencies get redistributed, but the surviving spatial
+structure after band-limited optimization is similar across amplitudes.
+The temporal kernel shows a strong graded effect: microsaccades produce
+biphasic kernels with a slow rebound (sensitive to low-frequency
+modulations they expose), while large saccades produce sharply-peaked
+fast kernels (tuned to the high-spatial-frequency saturation regime).
+
+**Figure 6b (diagnostic).** Sanity check on the saccade redistribution
+kernel Q_sac.
+- Top row: 2D log-contour of Q at A ∈ {0.5°, 2.5°, 7°} with the
+  predicted crossover f_c = 1/(2A) marked.
+- Middle row left: spatial profile Q(f, ω₀=8 Hz) for several A,
+  showing the f² rise and saturation.
+- Middle row right: temporal profile Q(f₀=0.5 cyc/u, ω), showing
+  the ~1/ω² falloff at high ω.
+- Bottom row: full spectra C_sac vs C_drift for comparison, plus a
+  spatial-power conservation check confirming that drift exactly
+  preserves C_I(f) and the saccade spectrum integrates proportionally
+  to C_I.
+The figure also prints numerical sanity checks: low-f log-log slope
+(predicted 2.0; measured 1.98), and 1/A scaling of the crossover
+(predicted ratio 4.0 between A=1° and A=4°; measured 4.01).
+
+**Note on the trajectory window.** The saccade transient is observed
+over a finite time window. Without windowing, the FFT picks up sinc
+side-lobes from the steady-state portion of u(t) (which sits at
+u = 1 from ~80 ms post-saccade to the window edge). The default
+implementation applies a Tukey window of half-width 200 ms with a
+100 ms cosine taper on each side, representing the natural
+inter-saccadic interval. This kills the spurious lobes while
+preserving the saccade's spectral content. The window parameters are
+exposed as keyword arguments; `test_saccade_window_kills_sinc_lobes`
+quantifies the improvement.
 
 ## Aliasing
 
@@ -152,10 +209,16 @@ optimisation solves.
 
 ## Validation
 
-All 30 tests pass on numpy 2.4 / scipy 1.17. The suite covers:
+All 39 tests pass on numpy 2.4 / scipy 1.17. The suite covers:
 
 - spectrum normalisation (drift Lorentzian integrates to C_I(f)) and
   power-preservation in ω for both drift and linear motion;
+- saccade template causality (zero before t=0), settling to 1, and
+  overshoot magnitude consistent with zeta=0.6;
+- saccade Q kernel non-negativity, low-f f² rise (whitening regime),
+  and crossover scaling as 1/A (matching Mostofi et al. fig 3D);
+- saccade spectrum factorization C_sac = C_I · Q;
+- saccade trajectory windowing reduces spurious sinc-lobe ringing;
 - KKT optimality of the closed-form solver (relative residual ≤ 1e-10
   on the active set);
 - water-filling reduction in the σ_in → 0 limit;

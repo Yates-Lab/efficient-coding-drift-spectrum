@@ -5,13 +5,16 @@ Two regimes in the cycle (Boi et al. 2017):
   Late fixation: drift-dominated. Spectrum is whitened (slope ~0 in f).
                  Optimal kernel: high spatial freq, sustained temporal —
                  parvo-like.
-  Early fixation: saccade-transient. Spectrum preserves natural-image 1/f^2
-                  shape. Optimal kernel: low spatial freq, fast temporal —
-                  magno-like.
+  Early fixation: saccade-transient. Q(f, ω) has a low-f whitening regime
+                  and a high-f saturation regime; multiplied by I(f) ∝ f⁻²,
+                  the retinal-input spectrum is approximately constant at
+                  low f and follows f⁻² at high f. Optimal kernel: low
+                  spatial freq, fast temporal — magno-like.
 
 Layout:
   Row 1 (late = drift): spatial and temporal kernels as D varies.
-  Row 2 (early = saccade transient): spatial and temporal kernels as A varies.
+  Row 2 (early = saccade transient): spatial and temporal kernels as
+         mean saccade amplitude varies.
   Row 3 (summary):
     (left)  peak spatial frequency f* across regimes and parameters.
     (right) temporal centroid (Hz) — "speed" of the kernel — across the same.
@@ -25,7 +28,7 @@ sys.path.insert(0, ".")
 import numpy as np
 import matplotlib.pyplot as plt
 
-from src.spectra import BoiCycleEarlySpectrum, BoiCycleLateSpectrum
+from src.spectra import BoiEarlyCleanApprox, BoiLateDriftApprox
 from src.pipeline import run, extract_kernels
 from src.plotting import setup_style, parameter_palette
 from src.params import OMEGA_MIN, OMEGA_MAX
@@ -62,12 +65,14 @@ def _temporal_centroid(result):
 def fig_q3():
     sigma_in, sigma_out, P0 = 0.3, 1.0, 50.0
 
-    D_sweep = [0.5, 2.0, 8.0, 30.0]                 # late-fixation drift
-    A_sweep = [1.0, 2.5, 4.4, 7.0]                  # early-fixation amplitude
+    D_sweep = [0.01, 0.05, 0.2, 0.8]                # late-fixation drift
+    mean_A_sweep = [1.0, 2.5, 4.4, 7.0]              # early-fixation amplitude
+    sd_A = 1.3
+    A_min = 1.0
     T_win_fixed = 0.150                             # 150 ms early-fixation window
 
     palette_late = parameter_palette(len(D_sweep), cmap="Purples", lo=0.35, hi=0.95)
-    palette_early = parameter_palette(len(A_sweep), cmap="Reds", lo=0.35, hi=0.95)
+    palette_early = parameter_palette(len(mean_A_sweep), cmap="Reds", lo=0.35, hi=0.95)
 
     # -------------------------------------------------------------------
     # Run all conditions
@@ -75,7 +80,7 @@ def fig_q3():
     results_late = []
     print("Late regime (drift):")
     for D, color in zip(D_sweep, palette_late):
-        r = run(BoiCycleLateSpectrum(D=D),
+        r = run(BoiLateDriftApprox(D=D),
                 sigma_in=sigma_in, sigma_out=sigma_out, P0=P0, grid="hi_res")
         extract_kernels(r)
         omega_c = _temporal_centroid(r)
@@ -85,13 +90,16 @@ def fig_q3():
 
     results_early = []
     print("Early regime (saccade transient):")
-    for A, color in zip(A_sweep, palette_early):
-        r = run(BoiCycleEarlySpectrum(A=A, T_win=T_win_fixed),
+    for mean_A, color in zip(mean_A_sweep, palette_early):
+        A_max = min(10.0, max(A_min + 1.0, 2.0 * mean_A))
+        r = run(BoiEarlyCleanApprox(mean_A=mean_A, sd_A=sd_A,
+                                    A_min=A_min, A_max=A_max,
+                                    T_win=T_win_fixed),
                 sigma_in=sigma_in, sigma_out=sigma_out, P0=P0, grid="hi_res")
         extract_kernels(r)
         omega_c = _temporal_centroid(r)
-        results_early.append((A, color, r, omega_c))
-        print(f"  A = {A:5.2f}: I*={r.I:.3f}  f_peak={r.f_peak:.3f}  "
+        results_early.append((mean_A, color, r, omega_c))
+        print(f"  mean_A = {mean_A:5.2f}: I*={r.I:.3f}  f_peak={r.f_peak:.3f}  "
               f"f_temporal={omega_c:.1f} Hz")
 
     # -------------------------------------------------------------------
@@ -129,13 +137,13 @@ def fig_q3():
     # Row 2: early regime
     ax_sp_early = axes[1, 0]
     ax_t_early = axes[1, 1]
-    for A, color, r, _ in results_early:
+    for mean_A, color, r, _ in results_early:
         v_norm = r.spatial_v / max(np.max(np.abs(r.spatial_v)), 1e-30)
         ax_sp_early.plot(r.spatial_r, v_norm, color=color, lw=1.3,
-                         label=rf"$A={A}^\circ$")
+                         label=rf"$\bar{{A}}={mean_A}^\circ$")
         h_norm = r.temporal_v / max(np.max(np.abs(r.temporal_v)), 1e-30)
         ax_t_early.plot(r.temporal_t, h_norm, color=color, lw=1.3,
-                        label=rf"$A={A}^\circ$")
+                        label=rf"$\bar{{A}}={mean_A}^\circ$")
     ax_sp_early.set_xlim(-15, 15)
     ax_sp_early.axhline(0, color="0.7", lw=0.4)
     ax_sp_early.set_xlabel(r"$r$ (deg)")
@@ -163,10 +171,10 @@ def fig_q3():
         ax_scatter.annotate(rf"$D={D}$", (r.f_peak, c),
                             xytext=(5, 4), textcoords="offset points",
                             fontsize=7, color="0.2")
-    for A, color, r, c in results_early:
+    for mean_A, color, r, c in results_early:
         ax_scatter.scatter(r.f_peak, c, s=80, color=color, zorder=3,
                            edgecolor="black", linewidth=0.5, marker="s")
-        ax_scatter.annotate(rf"$A={A}^\circ$", (r.f_peak, c),
+        ax_scatter.annotate(rf"$\bar{{A}}={mean_A}^\circ$", (r.f_peak, c),
                             xytext=(5, 4), textcoords="offset points",
                             fontsize=7, color="0.2")
     # Annotate magno / parvo regions
@@ -190,15 +198,20 @@ def fig_q3():
                        label="early (saccade, magno)")
     ax_scatter.legend(loc="lower left", fontsize=7)
 
-    # T_win sweep for early-fixation
+    # T_win sweep for early-fixation. T_win sets the analytic envelope's
+    # low-omega floor (omega_low = 2π / T_win); other early-fixation physics
+    # is unchanged, so the effect is milder than in the windowed-FT model.
     ax_Tw = axes[2, 1]
     T_win_vals = np.array([0.05, 0.080, 0.120, 0.150, 0.20, 0.30, 0.512])
-    A_for_sweep = 4.4
+    mean_A_for_sweep = 4.4
+    A_max_for_sweep = min(10.0, max(A_min + 1.0, 2.0 * mean_A_for_sweep))
     f_peaks = []
     f_centroids = []
     print("Early-regime T_win sweep:")
     for Tw in T_win_vals:
-        r = run(BoiCycleEarlySpectrum(A=A_for_sweep, T_win=Tw),
+        r = run(BoiEarlyCleanApprox(mean_A=mean_A_for_sweep, sd_A=sd_A,
+                                    A_min=A_min, A_max=A_max_for_sweep,
+                                    T_win=Tw),
                 sigma_in=sigma_in, sigma_out=sigma_out, P0=P0, grid="hi_res")
         extract_kernels(r)
         c = _temporal_centroid(r)
@@ -216,7 +229,7 @@ def fig_q3():
     ax_Tw_b.set_ylabel("temporal centroid (Hz)", color="darkblue")
     ax_Tw.tick_params(axis="y", labelcolor="tab:red")
     ax_Tw_b.tick_params(axis="y", labelcolor="darkblue")
-    ax_Tw.set_title(rf"(d) Early regime vs $T_\mathrm{{win}}$ ($A={A_for_sweep}^\circ$)")
+    ax_Tw.set_title(rf"(d) Early regime vs $T_\mathrm{{win}}$ ($\bar{{A}}={mean_A_for_sweep}^\circ$)")
     # Single combined legend
     h1, l1 = ax_Tw.get_legend_handles_labels()
     h2, l2 = ax_Tw_b.get_legend_handles_labels()

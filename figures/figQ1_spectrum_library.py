@@ -23,7 +23,7 @@ import matplotlib.pyplot as plt
 
 from src.spectra import (
     DriftSpectrum, SaccadeSpectrum, DriftPlusSaccadeSpectrum,
-    BoiCycleEarlySpectrum, BoiCycleLateSpectrum,
+    BoiEarlyCleanApprox, BoiLateDriftApprox,
 )
 from src.pipeline import run, extract_kernels
 from src.plotting import setup_style
@@ -46,10 +46,10 @@ def fig_q1():
          DriftPlusSaccadeSpectrum(D=2.0, A=2.5, lam=3.0),
          "tab:green"),
         ("late = drift",
-         BoiCycleLateSpectrum(D=2.0),
+         BoiLateDriftApprox(D=0.05),
          "tab:purple"),
         ("early (saccade transient)",
-         BoiCycleEarlySpectrum(A=4.4, T_win=0.150),
+         BoiEarlyCleanApprox(),
          "tab:red"),
     ]
 

@@ -2,7 +2,7 @@
 
 Three companion figures:
   1a  main examples: drift sweep over D; saccade sweep over A.
-  1b  Boi cycle decomposition: early fixation, late fixation, combined.
+  1b  Boi cycle decomposition: early vs late fixation.
   1c  comprehensive library: diffusion, saccades, early/late fixation cycle,
       linear velocity distribution.
 
@@ -25,9 +25,8 @@ from src.spectra import (
     DriftSpectrum,
     SaccadeSpectrum,
     LinearMotionSpectrum,
-    BoiCycleEarlySpectrum,
-    BoiCycleLateSpectrum,
-    DriftPlusSaccadeSpectrum,
+    BoiEarlyCleanApprox,
+    BoiLateDriftApprox,
 )
 from src.plotting import setup_style
 
@@ -75,6 +74,10 @@ def panel_loglog(ax, f, omega, C, vmin, vmax):
 
 def overlay_drift(ax, f, D):
     ax.plot(f, D * f ** 2, color="white", lw=0.8, alpha=0.6)
+
+
+def overlay_drift_cycles(ax, f, D):
+    ax.plot(f, D * (2.0 * np.pi * f) ** 2, color="white", lw=0.8, alpha=0.6)
 
 
 def overlay_linear(ax, f, s):
@@ -148,24 +151,24 @@ def fig1a():
 
 
 def fig1b():
-    """Boi cycle decomposition: early, late, combined."""
+    """Boi cycle decomposition: early vs late fixation."""
     f, omega = make_grid()
 
-    D = 2.0
-    early = BoiCycleEarlySpectrum(A=4.4, T_win=0.150).C(f, omega)
-    late = BoiCycleLateSpectrum(D=D).C(f, omega)
-    combined = DriftPlusSaccadeSpectrum(D=D, A=4.4, lam=3.0).C(f, omega)
+    D_late = 0.05
+    early = BoiEarlyCleanApprox(
+        mean_A=4.4, sd_A=1.3, A_min=1.0, A_max=10.0,
+    ).C(f, omega)
+    late = BoiLateDriftApprox(D=D_late).C(f, omega)
 
     panels = [
         ("Early fixation\n(saccade transient)", early, "none", None),
-        (f"Late fixation\n(drift, $D={D:g}$)", late, "drift", D),
-        ("Combined\n(drift + saccades, unified)", combined, "drift", D),
+        (f"Late fixation\n(drift, $D={D_late:g}$)", late, "drift_cycles", D_late),
     ]
 
     vmin, vmax = shared_lims([p[1] for p in panels])
 
     fig, axes = plt.subplots(
-        1, 3, figsize=(8.0, 3.3), sharex=True, sharey=True,
+        1, 2, figsize=(6.0, 3.3), sharex=True, sharey=True,
         gridspec_kw={"wspace": 0.22},
     )
 
@@ -174,17 +177,20 @@ def fig1b():
         ax.set_title(title, pad=4)
         if kind == "drift":
             overlay_drift(ax, f, param)
+        elif kind == "drift_cycles":
+            overlay_drift_cycles(ax, f, param)
 
     for ax in axes:
         ax.set_xlabel(r"$f$ (cycles/unit)")
     axes[0].set_ylabel(r"$\omega$ (rad/s)")
 
-    fig.subplots_adjust(left=0.08, right=0.90, top=0.82, bottom=0.16)
+    fig.subplots_adjust(left=0.10, right=0.88, top=0.82, bottom=0.16)
     fig.suptitle(
-        r"Figure 1b  Boi cycle decomposition $C_\theta(f, \omega)$",
+        r"Figure 1b  Boi cycle decomposition $C_\theta(f, \omega)$: "
+        r"early vs late fixation",
         y=0.99, fontsize=10.5,
     )
-    add_colorbar(fig, [0.92, 0.18, 0.014, 0.64], CBAR_LABEL)
+    add_colorbar(fig, [0.90, 0.18, 0.018, 0.64], CBAR_LABEL)
 
     out = "outputs/fig1b_boi_cycle.png"
     fig.savefig(out)
@@ -197,6 +203,7 @@ def fig1c():
     f, omega = make_grid()
 
     D = 2.0
+    D_late = 0.05
     s_lin = 1.0
     panels = [
         ("Diffusion",
@@ -206,11 +213,13 @@ def fig1c():
          SaccadeSpectrum(A=2.5, lam=3.0).C(f, omega),
          "none", None),
         ("Early fixation cycle",
-         BoiCycleEarlySpectrum(A=4.4, T_win=0.150).C(f, omega),
+         BoiEarlyCleanApprox(
+             mean_A=4.4, sd_A=1.3, A_min=1.0, A_max=10.0,
+         ).C(f, omega),
          "none", None),
         ("Late fixation cycle",
-         BoiCycleLateSpectrum(D=D).C(f, omega),
-         "drift", D),
+         BoiLateDriftApprox(D=D_late).C(f, omega),
+         "drift_cycles", D_late),
         ("Linear velocity distribution",
          LinearMotionSpectrum(s=s_lin).C(f, omega),
          "linear", s_lin),
@@ -228,6 +237,8 @@ def fig1c():
         ax.set_title(title, pad=4)
         if kind == "drift":
             overlay_drift(ax, f, param)
+        elif kind == "drift_cycles":
+            overlay_drift_cycles(ax, f, param)
         elif kind == "linear":
             overlay_linear(ax, f, param)
 

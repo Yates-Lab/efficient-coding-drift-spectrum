@@ -1,14 +1,22 @@
-"""Shared power-spectrum panel generation for figures.
+"""Shared power-spectrum library for figures and analyses.
 
-This module is the figure-facing source of truth for movement spectra.  Figure
-scripts should ask for named panels here instead of rebuilding Rucci/Boi cycle
-arrays or choosing separate display grids locally.
+This is the human-readable place to add new movement spectra.  The pattern is:
+
+1. Add or reuse a ``Spectrum`` class in ``src.spectra``.
+2. Add a small factory below that returns ``SpectrumSpec`` objects.
+3. Register that factory in ``SPECTRUM_SETS`` if it is a named collection that
+   figures or scripts should be able to request.
+
+Figure scripts should consume ``SpectrumSpec`` collections and then call the
+shared pipeline, rather than rebuilding spectra, grids, weights, and solver
+calls locally.  The older panel helpers remain below for display-specific
+Figure 1/7 views.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Optional, Tuple
+from dataclasses import dataclass, field
+from typing import Callable, Dict, Optional, Sequence, Tuple
 
 import numpy as np
 
@@ -25,6 +33,262 @@ from src.spectra import (
 )
 
 TWOPI = 2.0 * np.pi
+
+
+DEFAULT_DRIFT_SWEEP = (0.05, 0.5, 2.0, 10.0, 50.0)
+DEFAULT_SACCADE_SWEEP = (0.5, 1.0, 2.0, 4.0, 8.0)
+DEFAULT_EQUIVALENT_CASES = (0.3, 2.5, 7.0)
+
+
+@dataclass(frozen=True)
+class SpectrumSpec:
+    """Human-readable description of one spectrum to run or plot.
+
+    ``spectrum`` is the only field needed by the numerical pipeline.  The other
+    fields are intentionally descriptive metadata so figure scripts can stay
+    declarative and future spectra are easy to inspect.
+    """
+
+    key: str
+    label: str
+    spectrum: object
+    family: str
+    parameters: Dict[str, float] = field(default_factory=dict)
+    color: Optional[str] = None
+    title: Optional[str] = None
+    reference: Optional[str] = None
+    notes: str = ""
+
+    def describe(self) -> str:
+        return self.label
+
+
+def _params(**values: float) -> Dict[str, float]:
+    return {k: float(v) for k, v in values.items()}
+
+
+def drift_spectrum_specs(
+    D_values: Sequence[float] = DEFAULT_DRIFT_SWEEP,
+    *,
+    color: Optional[str] = None,
+) -> list[SpectrumSpec]:
+    """Brownian drift spectra for a sweep over diffusion coefficient ``D``."""
+    return [
+        SpectrumSpec(
+            key=f"drift_D_{D:g}",
+            label=rf"$D={D:g}$",
+            title=rf"$D = {D:g}$",
+            spectrum=DriftSpectrum(D=float(D)),
+            family="drift",
+            parameters=_params(D=D),
+            color=color,
+            reference="Kuang et al. 2012",
+        )
+        for D in D_values
+    ]
+
+
+def saccade_spectrum_specs(
+    A_values: Sequence[float] = DEFAULT_SACCADE_SWEEP,
+    *,
+    lam: float = 3.0,
+    color: Optional[str] = None,
+) -> list[SpectrumSpec]:
+    """Stationary Poisson-saccade spectra for a sweep over amplitude ``A``."""
+    return [
+        SpectrumSpec(
+            key=f"saccade_A_{A:g}_lam_{lam:g}",
+            label=rf"$A={A:g}^\circ$",
+            title=rf"$A = {A:g}$",
+            spectrum=SaccadeSpectrum(A=float(A), lam=float(lam)),
+            family="saccade",
+            parameters=_params(A=A, lam=lam),
+            color=color,
+            reference="Mostofi et al. 2020",
+        )
+        for A in A_values
+    ]
+
+
+def drift_plus_saccade_specs(
+    D_values: Sequence[float],
+    *,
+    A: float = 2.5,
+    lam: float = 3.0,
+    color: Optional[str] = None,
+) -> list[SpectrumSpec]:
+    """Unified stationary drift+saccade spectra for a sweep over ``D``."""
+    return [
+        SpectrumSpec(
+            key=f"drift_saccade_D_{D:g}_A_{A:g}_lam_{lam:g}",
+            label=rf"$D={D:g}$",
+            title=rf"$D = {D:g}$",
+            spectrum=DriftPlusSaccadeSpectrum(D=float(D), A=float(A), lam=float(lam)),
+            family="drift+saccade",
+            parameters=_params(D=D, A=A, lam=lam),
+            color=color,
+            reference="this work (unified stationary)",
+        )
+        for D in D_values
+    ]
+
+
+def linear_motion_spectrum_specs(
+    s_values: Sequence[float] = (1.0,),
+    *,
+    color: Optional[str] = None,
+) -> list[SpectrumSpec]:
+    """Gaussian linear-motion spectra for a sweep over speed scale ``s``."""
+    return [
+        SpectrumSpec(
+            key=f"linear_s_{s:g}",
+            label=rf"$s={s:g}$",
+            title=rf"$s = {s:g}$",
+            spectrum=LinearMotionSpectrum(s=float(s)),
+            family="linear_motion",
+            parameters=_params(s=s),
+            color=color,
+            reference="Dong & Atick 1995",
+        )
+        for s in s_values
+    ]
+
+
+def cycle_spectrum_specs(*, use_modulated_early: bool = True) -> list[SpectrumSpec]:
+    """Canonical trace-based early/late Rucci/Boi cycle spectra."""
+    early, late = cycle_solver_spectra(use_modulated_early=use_modulated_early)
+    return [
+        SpectrumSpec(
+            key="cycle_early",
+            label="early cycle (Rucci/Boi)",
+            title="Early fixation",
+            spectrum=early,
+            family="fixation_cycle",
+            parameters=_params(cycle_phase=0.0),
+            color="tab:red",
+            reference="Boi et al. 2017 / Rucci-style trace estimate",
+            notes="Uses C_early_mod by default.",
+        ),
+        SpectrumSpec(
+            key="cycle_late",
+            label="late cycle (Rucci/Boi)",
+            title="Late fixation",
+            spectrum=late,
+            family="fixation_cycle",
+            parameters=_params(cycle_phase=1.0),
+            color="tab:purple",
+            reference="Boi et al. 2017 / Rucci-style trace estimate",
+            notes="Uses C_late_total from the canonical Figure 7 cycle.",
+        ),
+    ]
+
+
+def spectrum_comparison_spec_objects(*, include_controls: bool = True) -> list[SpectrumSpec]:
+    """Named comparison set used by Q1 and general sanity checks."""
+    specs: list[SpectrumSpec] = []
+    if include_controls:
+        specs.extend([
+            SpectrumSpec(
+                key="drift_control",
+                label="drift",
+                title="Drift",
+                spectrum=DriftSpectrum(D=2.0),
+                family="drift",
+                parameters=_params(D=2.0),
+                color="tab:blue",
+            ),
+            SpectrumSpec(
+                key="saccade_control",
+                label="saccade",
+                title="Saccade",
+                spectrum=SaccadeSpectrum(A=2.5, lam=3.0),
+                family="saccade",
+                parameters=_params(A=2.5, lam=3.0),
+                color="tab:orange",
+            ),
+            SpectrumSpec(
+                key="drift_saccade_control",
+                label="drift + saccade",
+                title="Drift + saccade",
+                spectrum=DriftPlusSaccadeSpectrum(D=2.0, A=2.5, lam=3.0),
+                family="drift+saccade",
+                parameters=_params(D=2.0, A=2.5, lam=3.0),
+                color="tab:green",
+            ),
+        ])
+    cycle_specs = cycle_spectrum_specs(use_modulated_early=True)
+    # Preserve the legacy Q1 display order: late-cycle control, then early.
+    specs.extend([cycle_specs[1], cycle_specs[0]])
+    return specs
+
+
+def equivalent_saccade_drift_pair_specs(
+    A_values: Sequence[float] = DEFAULT_EQUIVALENT_CASES,
+    *,
+    lam: float = 3.0,
+) -> list[tuple[SpectrumSpec, SpectrumSpec]]:
+    """Pair each saccade spectrum with its small-k equivalent drift spectrum."""
+    pairs = []
+    for A in A_values:
+        D_eff = np.pi ** 2 * float(lam) * float(A) ** 2
+        sac = SpectrumSpec(
+            key=f"saccade_A_{A:g}",
+            label=rf"saccade $A={A:g}^\circ$",
+            spectrum=SaccadeSpectrum(A=float(A), lam=float(lam)),
+            family="saccade",
+            parameters=_params(A=A, lam=lam),
+            color="#1f6fb4",
+        )
+        drift = SpectrumSpec(
+            key=f"equiv_drift_A_{A:g}",
+            label=rf"drift $D_\mathrm{{eff}}={D_eff:.1f}$",
+            spectrum=DriftSpectrum(D=D_eff),
+            family="equivalent_drift",
+            parameters=_params(D=D_eff, A_source=A, lam=lam),
+            color="#d8540e",
+            notes="D_eff = pi^2 * lam * A^2.",
+        )
+        pairs.append((sac, drift))
+    return pairs
+
+
+SPECTRUM_SETS: Dict[str, Callable[..., list[SpectrumSpec]]] = {
+    "drift_sweep": drift_spectrum_specs,
+    "saccade_sweep": saccade_spectrum_specs,
+    "linear_motion_sweep": linear_motion_spectrum_specs,
+    "cycle_early_late": cycle_spectrum_specs,
+    "comparison_controls_and_cycle": spectrum_comparison_spec_objects,
+}
+
+
+SPECTRUM_SET_DESCRIPTIONS = {
+    "drift_sweep": "Brownian drift spectra parameterized by D.",
+    "saccade_sweep": "Stationary Poisson-saccade spectra parameterized by A.",
+    "linear_motion_sweep": "Gaussian linear-motion spectra parameterized by s.",
+    "cycle_early_late": "Canonical trace-based Rucci/Boi early and late fixation spectra.",
+    "comparison_controls_and_cycle": "Drift, saccade, drift+saccade, and cycle controls.",
+}
+
+
+def list_spectrum_sets() -> Dict[str, str]:
+    """Return the named spectrum collections available to scripts."""
+    return dict(SPECTRUM_SET_DESCRIPTIONS)
+
+
+def get_spectrum_set(name: str, **kwargs) -> list[SpectrumSpec]:
+    """Return a named spectrum collection.
+
+    Examples
+    --------
+    get_spectrum_set("drift_sweep", D_values=np.geomspace(0.01, 200, 25))
+    get_spectrum_set("cycle_early_late")
+    """
+    try:
+        factory = SPECTRUM_SETS[name]
+    except KeyError as exc:
+        available = ", ".join(sorted(SPECTRUM_SETS))
+        raise ValueError(f"Unknown spectrum set {name!r}. Available: {available}") from exc
+    return factory(**kwargs)
 
 
 @dataclass(frozen=True)
@@ -179,23 +443,10 @@ def cycle_solver_spectra(*, use_modulated_early: bool = True):
 
 def spectrum_comparison_specs(*, include_controls: bool = True):
     """Return named spectra used by Q1's filter-reconstruction comparison."""
-    early_cycle, late_cycle = cycle_solver_spectra(use_modulated_early=True)
-    specs = []
-    if include_controls:
-        specs.extend([
-            ("drift", DriftSpectrum(D=2.0), "tab:blue"),
-            ("saccade", SaccadeSpectrum(A=2.5, lam=3.0), "tab:orange"),
-            (
-                "drift + saccade",
-                DriftPlusSaccadeSpectrum(D=2.0, A=2.5, lam=3.0),
-                "tab:green",
-            ),
-        ])
-    specs.extend([
-        ("late cycle (Rucci/Boi)", late_cycle, "tab:purple"),
-        ("early cycle (Rucci/Boi)", early_cycle, "tab:red"),
-    ])
-    return specs
+    return [
+        (spec.label, spec.spectrum, spec.color)
+        for spec in spectrum_comparison_spec_objects(include_controls=include_controls)
+    ]
 
 
 def overlay_curve_hz(panel: SpectrumPanel):
@@ -216,6 +467,19 @@ def overlay_curve_hz(panel: SpectrumPanel):
 
 
 __all__ = [
+    "SpectrumSpec",
+    "DEFAULT_DRIFT_SWEEP",
+    "DEFAULT_SACCADE_SWEEP",
+    "DEFAULT_EQUIVALENT_CASES",
+    "drift_spectrum_specs",
+    "saccade_spectrum_specs",
+    "drift_plus_saccade_specs",
+    "linear_motion_spectrum_specs",
+    "cycle_spectrum_specs",
+    "spectrum_comparison_spec_objects",
+    "equivalent_saccade_drift_pair_specs",
+    "list_spectrum_sets",
+    "get_spectrum_set",
     "SpectrumPanel",
     "canonical_positive_cycle_view",
     "cycle_decomposition_panels",

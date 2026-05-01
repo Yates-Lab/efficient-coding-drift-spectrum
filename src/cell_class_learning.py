@@ -223,6 +223,38 @@ def build_cell_learning_conditions(
     )
 
 
+def conditions_from_spectrum_specs(
+    specs: Sequence,
+    *,
+    condition_weights: Optional[Array] = None,
+    default_epoch: str = "condition",
+) -> Tuple[List[Condition], Array]:
+    """Convert SpectrumSpec-like objects into cell-class learning conditions.
+
+    A spec only needs ``key``, ``spectrum``, and optional metadata fields such
+    as ``family`` and ``parameters``.  This keeps cell-class experiments tied to
+    the same human-readable spectrum library used by the figure scripts.
+    """
+    conditions: List[Condition] = []
+    for i, spec in enumerate(specs):
+        params = getattr(spec, "parameters", {}) or {}
+        if params:
+            parameter_name, parameter_value = next(iter(params.items()))
+        else:
+            parameter_name, parameter_value = "index", float(i)
+        conditions.append(
+            Condition(
+                name=getattr(spec, "key", f"condition_{i}"),
+                epoch=getattr(spec, "family", default_epoch),
+                parameter_name=str(parameter_name),
+                parameter_value=float(parameter_value),
+                spectrum=getattr(spec, "spectrum", spec),
+            )
+        )
+    pi = normalize_condition_weights(condition_weights, len(conditions))
+    return conditions, pi
+
+
 def solve_oracle_stack(
     conditions: Sequence[Condition],
     *,

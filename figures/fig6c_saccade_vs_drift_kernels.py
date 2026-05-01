@@ -24,51 +24,15 @@ sys.path.insert(0, ".")
 import numpy as np
 import matplotlib.pyplot as plt
 
-from src.spectra import saccade_spectrum, drift_spectrum
-from src.solver import solve_efficient_coding
-from src.kernels import (
-    spatial_kernel_2d, radial_cross_section,
-    minimum_phase_temporal_filter, soft_band_taper,
-)
-from src.plotting import setup_style, radial_weights, band_mask_radial
-from src.params import F_MAX, OMEGA_MIN, OMEGA_MAX, hi_res_grid
+from src.pipeline import SolveConfig, run_many
+from src.plotting import setup_style
+from src.power_spectrum_library import equivalent_saccade_drift_pair_specs
 
 setup_style()
 
 
-def _kernels(C, f, omega, sigma_in, sigma_out, P0, weights_b, mask):
-    v_sq, _, I_star = solve_efficient_coding(
-        C, sigma_in, sigma_out, P0, weights_b, band_mask=mask,
-    )
-    domega = np.gradient(omega)
-    v_s_sq = np.sum(v_sq * np.abs(domega)[None, :], axis=1) / (2 * np.pi)
-    v_s = np.sqrt(np.maximum(v_s_sq, 0.0))
-    f_fine = np.linspace(0.0, 6.0, 1024)
-    v_s_interp = np.interp(f_fine, f, v_s, left=v_s[0], right=0.0)
-    rx, ry, v_xy = spatial_kernel_2d(
-        lambda k: np.interp(k, f_fine, v_s_interp,
-                             left=v_s_interp[0], right=0.0),
-        k_max=8.0, n_k=512,
-    )
-    r, v_r = radial_cross_section(v_xy, rx, ry)
-
-    energy_per_f = np.sum(v_sq * np.abs(domega)[None, :], axis=1)
-    i_peak_f = int(np.argmax(energy_per_f))
-    v_t_mag = np.sqrt(np.maximum(v_sq[i_peak_f, :], 0.0))
-    taper = soft_band_taper(omega, OMEGA_MIN, OMEGA_MAX, alpha=0.25)
-    v_t_smooth = np.maximum(v_t_mag * taper, 1e-3 * (v_t_mag * taper).max())
-    t, h_t, _ = minimum_phase_temporal_filter(v_t_smooth, omega)
-    return r, v_r, t, h_t, I_star
-
-
 def fig6c():
-    f, omega = hi_res_grid()
-    F = f[:, None]
-    W = omega[None, :]
     sigma_in, sigma_out, P0 = 0.3, 1.0, 50.0
-    weights = radial_weights(f, omega)
-    mask = band_mask_radial(f, omega, F_MAX, OMEGA_MIN, OMEGA_MAX)
-    weights_b = weights * mask
     lam = 3.0
 
     cases = [
@@ -85,17 +49,18 @@ def fig6c():
     color_sac = "#1f6fb4"
     color_drift = "#d8540e"
 
-    for col, (A, label) in enumerate(cases):
-        D_eff = np.pi ** 2 * lam * A ** 2
-        C_sac = saccade_spectrum(f, omega, A=A, lam=lam)
-        C_drift = drift_spectrum(F, W, D=D_eff, beta=2.0)
-
-        r_s, vr_s, t_s, ht_s, I_s = _kernels(
-            C_sac, f, omega, sigma_in, sigma_out, P0, weights_b, mask,
+    spec_pairs = equivalent_saccade_drift_pair_specs([A for A, _ in cases], lam=lam)
+    for col, ((A, label), (sac_spec, drift_spec)) in enumerate(zip(cases, spec_pairs)):
+        D_eff = drift_spec.parameters["D"]
+        sac_result, drift_result = run_many(
+            [sac_spec, drift_spec],
+            SolveConfig(sigma_in=sigma_in, sigma_out=sigma_out, P0=P0, grid="hi_res"),
+            kernels=True,
         )
-        r_d, vr_d, t_d, ht_d, I_d = _kernels(
-            C_drift, f, omega, sigma_in, sigma_out, P0, weights_b, mask,
-        )
+        r_s, vr_s = sac_result.spatial_r, sac_result.spatial_v
+        t_s, ht_s = sac_result.temporal_t, sac_result.temporal_v
+        r_d, vr_d = drift_result.spatial_r, drift_result.spatial_v
+        t_d, ht_d = drift_result.temporal_t, drift_result.temporal_v
         vr_s_n = vr_s / np.max(np.abs(vr_s))
         vr_d_n = vr_d / np.max(np.abs(vr_d))
         ht_s_n = ht_s / np.max(np.abs(ht_s))
@@ -103,9 +68,9 @@ def fig6c():
 
         ax_sp = axes[0, col]
         ax_sp.plot(r_s, vr_s_n, color=color_sac, lw=1.6,
-                   label=rf"saccade $A={A:g}^\circ$ ($I^*={I_s:.2f}$)")
+                   label=rf"saccade $A={A:g}^\circ$ ($I^*={sac_result.I:.2f}$)")
         ax_sp.plot(r_d, vr_d_n, color=color_drift, lw=1.4, ls="--",
-                   label=rf"drift $D_\mathrm{{eff}}={D_eff:.1f}$ ($I^*={I_d:.2f}$)")
+                   label=rf"drift $D_\mathrm{{eff}}={D_eff:.1f}$ ($I^*={drift_result.I:.2f}$)")
         ax_sp.set_xlim(-3.0, 3.0)
         ax_sp.axhline(0.0, color="0.7", lw=0.4)
         ax_sp.axvline(0.0, color="0.85", lw=0.3)

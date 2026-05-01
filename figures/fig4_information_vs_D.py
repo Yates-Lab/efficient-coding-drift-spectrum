@@ -13,48 +13,32 @@ sys.path.insert(0, ".")
 import numpy as np
 import matplotlib.pyplot as plt
 
-from src.spectra import drift_spectrum
-from src.solver import solve_efficient_coding
+from src.pipeline import SolveConfig, run_many
 from src.plotting import (
     setup_style,
-    radial_weights,
-    band_mask_radial,
     parameter_palette,
 )
-from src.params import F_MAX, OMEGA_MIN, OMEGA_MAX, fast_grid
+from src.power_spectrum_library import drift_spectrum_specs
 
 setup_style()
 
 
-def _solve(f, omega, D, beta, sigma_in, sigma_out, P0, weights_b, mask):
-    F = f[:, None]
-    W = omega[None, :]
-    C = drift_spectrum(F, W, D=D, beta=beta)
-    _, _, I = solve_efficient_coding(
-        C, sigma_in, sigma_out, P0, weights_b, band_mask=mask,
-    )
-    return I
-
-
 def fig4():
-    f, omega = fast_grid()
-
     sigma_out = 1.0
     P0 = 50.0
     beta = 2.0
 
-    weights = radial_weights(f, omega)
-    mask = band_mask_radial(f, omega, F_MAX, OMEGA_MIN, OMEGA_MAX)
-    weights_b = weights * mask
-
     D_grid = np.geomspace(0.01, 200.0, 40)
     sigma_in_levels = np.geomspace(0.03, 3.0, 8)
+    specs = drift_spectrum_specs(D_grid)
 
     I_table = np.zeros((len(sigma_in_levels), len(D_grid)))
     for i, sin in enumerate(sigma_in_levels):
-        for j, D in enumerate(D_grid):
-            I_table[i, j] = _solve(f, omega, D, beta, sin, sigma_out, P0,
-                                    weights_b, mask)
+        results = run_many(
+            specs,
+            SolveConfig(sigma_in=sin, sigma_out=sigma_out, P0=P0, grid="fast"),
+        )
+        I_table[i] = [r.I for r in results]
         print(f"  sigma_in = {sin:.3g}: done")
 
     fig, axes = plt.subplots(1, 2, figsize=(9.6, 4.0),

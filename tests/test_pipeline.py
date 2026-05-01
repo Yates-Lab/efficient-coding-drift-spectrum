@@ -12,7 +12,17 @@ from src.spectra import (
     DriftSpectrum, SaccadeSpectrum, BoiCycleLateSpectrum,
     BoiCycleEarlySpectrum, DriftPlusSaccadeSpectrum,
 )
-from src.pipeline import run, extract_kernels, extract_spatial_kernel, extract_temporal_kernel
+from src.pipeline import (
+    SolveConfig,
+    run,
+    run_many,
+    extract_kernels,
+    extract_spatial_kernel,
+    extract_temporal_kernel,
+    spatial_kernel_slice,
+    temporal_kernel_slice,
+)
+from src.power_spectrum_library import drift_spectrum_specs
 
 
 # ---------------------------------------------------------------------------
@@ -59,6 +69,14 @@ def test_run_drift_plus_saccade_reduces_to_saccade_when_D0():
     np.testing.assert_allclose(r_combined.I, r_sac.I, rtol=1e-10)
 
 
+def test_run_many_accepts_spectrum_specs():
+    specs = drift_spectrum_specs([0.5, 2.0])
+    results = run_many(specs, SolveConfig(grid="fast"))
+    assert len(results) == 2
+    assert [r.spectrum.D for r in results] == [0.5, 2.0]
+    assert all(np.isfinite(r.I) and r.I > 0 for r in results)
+
+
 # ---------------------------------------------------------------------------
 # extract_kernels()
 # ---------------------------------------------------------------------------
@@ -94,6 +112,16 @@ def test_extract_kernels_does_both():
     extract_kernels(r)
     assert r.spatial_r is not None
     assert r.temporal_t is not None
+
+
+def test_kernel_slice_helpers_return_curves():
+    r = run(DriftSpectrum(D=2.0), grid="hi_res")
+    spatial_r, spatial_v = spatial_kernel_slice(r, omega0=10.0)
+    temporal_t, temporal_v = temporal_kernel_slice(r, f0=0.5)
+    assert spatial_r.shape == spatial_v.shape
+    assert temporal_t.shape == temporal_v.shape
+    assert np.all(np.isfinite(spatial_v))
+    assert np.all(np.isfinite(temporal_v))
 
 
 def test_pipeline_magno_parvo_ordering_in_boi_cycle():

@@ -22,9 +22,13 @@ sys.path.insert(0, ".")
 import numpy as np
 import matplotlib.pyplot as plt
 
-from src.spectra import DriftSpectrum, DriftPlusSaccadeSpectrum, SaccadeSpectrum
-from src.pipeline import run
+from src.pipeline import SolveConfig, run_many
 from src.plotting import setup_style, parameter_palette
+from src.power_spectrum_library import (
+    drift_plus_saccade_specs,
+    drift_spectrum_specs,
+    saccade_spectrum_specs,
+)
 
 setup_style()
 
@@ -46,11 +50,13 @@ def fig_q2():
 
     ax = axes[0, 0]
     print("Panel (a): I*(D) for drift only")
+    drift_specs = drift_spectrum_specs(D_vals)
     for sin, color in zip(sigma_in_vals, palette):
-        I_vals = []
-        for D in D_vals:
-            r = run(DriftSpectrum(D=D), sigma_in=sin, sigma_out=sigma_out, P0=P0)
-            I_vals.append(r.I)
+        results = run_many(
+            drift_specs,
+            SolveConfig(sigma_in=sin, sigma_out=sigma_out, P0=P0),
+        )
+        I_vals = [r.I for r in results]
         ax.semilogx(D_vals, I_vals, "o-", color=color, ms=3, lw=1.0,
                     label=rf"$\sigma_\mathrm{{in}}={sin}$")
         i_max = int(np.argmax(I_vals))
@@ -69,12 +75,13 @@ def fig_q2():
     print("Panel (b): I*(D) drift + saccade")
     A_fixed = 2.5
     lam_fixed = 3.0
+    combined_specs = drift_plus_saccade_specs(D_vals, A=A_fixed, lam=lam_fixed)
     for sin, color in zip(sigma_in_vals, palette):
-        I_combined = []
-        for D in D_vals:
-            r = run(DriftPlusSaccadeSpectrum(D=D, A=A_fixed, lam=lam_fixed),
-                    sigma_in=sin, sigma_out=sigma_out, P0=P0)
-            I_combined.append(r.I)
+        results = run_many(
+            combined_specs,
+            SolveConfig(sigma_in=sin, sigma_out=sigma_out, P0=P0),
+        )
+        I_combined = [r.I for r in results]
         ax.semilogx(D_vals, I_combined, "s-", color=color, ms=3, lw=1.0,
                     label=rf"$\sigma_\mathrm{{in}}={sin}$")
         i_max = int(np.argmax(I_combined))
@@ -92,12 +99,13 @@ def fig_q2():
     ax = axes[1, 0]
     print("Panel (c): I*(A) saccade only")
     A_vals = np.geomspace(0.05, 10.0, 18)
+    saccade_specs = saccade_spectrum_specs(A_vals, lam=lam_fixed)
     for sin, color in zip(sigma_in_vals, palette):
-        I_vals = []
-        for A in A_vals:
-            r = run(SaccadeSpectrum(A=A, lam=lam_fixed),
-                    sigma_in=sin, sigma_out=sigma_out, P0=P0)
-            I_vals.append(r.I)
+        results = run_many(
+            saccade_specs,
+            SolveConfig(sigma_in=sin, sigma_out=sigma_out, P0=P0),
+        )
+        I_vals = [r.I for r in results]
         ax.semilogx(A_vals, I_vals, "^-", color=color, ms=3, lw=1.0,
                     label=rf"$\sigma_\mathrm{{in}}={sin}$")
         print(f"  sigma_in={sin}: I* range [{min(I_vals):.3f}, {max(I_vals):.3f}]")
@@ -114,22 +122,15 @@ def fig_q2():
     ax = axes[1, 1]
     print("Panel (d): drift vs drift+saccade head-to-head")
     sin = 0.3
-    I_drift = []
-    I_combined = []
-    for D in D_vals:
-        r1 = run(DriftSpectrum(D=D),
-                 sigma_in=sin, sigma_out=sigma_out, P0=P0)
-        r2 = run(DriftPlusSaccadeSpectrum(D=D, A=A_fixed, lam=lam_fixed),
-                 sigma_in=sin, sigma_out=sigma_out, P0=P0)
-        I_drift.append(r1.I)
-        I_combined.append(r2.I)
+    config = SolveConfig(sigma_in=sin, sigma_out=sigma_out, P0=P0)
+    I_drift = [r.I for r in run_many(drift_specs, config)]
+    I_combined = [r.I for r in run_many(combined_specs, config)]
     ax.semilogx(D_vals, I_drift, "o-", color="tab:blue", ms=3, lw=1.0,
                 label="drift only")
     ax.semilogx(D_vals, I_combined, "s-", color="tab:green", ms=3, lw=1.0,
                 label=rf"drift + saccade ($A={A_fixed}^\circ$)")
     # mark the saccade-only baseline
-    r_sac = run(SaccadeSpectrum(A=A_fixed, lam=lam_fixed),
-                sigma_in=sin, sigma_out=sigma_out, P0=P0)
+    r_sac = run_many(saccade_spectrum_specs([A_fixed], lam=lam_fixed), config)[0]
     ax.axhline(r_sac.I, color="tab:orange", ls="--", lw=0.9,
                label=f"saccade only: $I^*$={r_sac.I:.2f}")
     ax.set_xlabel(r"$D$ (deg$^2$/s)")

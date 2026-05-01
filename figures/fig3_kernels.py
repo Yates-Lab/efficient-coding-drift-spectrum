@@ -21,70 +21,19 @@ sys.path.insert(0, ".")
 import numpy as np
 import matplotlib.pyplot as plt
 
-from src.spectra import drift_spectrum
-from src.solver import solve_efficient_coding
-from src.kernels import (
-    spatial_kernel_2d,
-    radial_cross_section,
-    minimum_phase_temporal_filter,
-    soft_band_taper,
-)
+from src.pipeline import SolveConfig, run_many
 from src.plotting import (
     setup_style,
-    radial_weights,
-    band_mask_radial,
     parameter_palette,
 )
-from src.params import F_MAX, OMEGA_MIN, OMEGA_MAX, hi_res_grid
+from src.power_spectrum_library import drift_spectrum_specs
 
 setup_style()
 
 
-def _solve(f, omega, D, beta, sigma_in, sigma_out, P0):
-    F = f[:, None]
-    W = omega[None, :]
-    C = drift_spectrum(F, W, D=D, beta=beta)
-    weights = radial_weights(f, omega)
-    mask = band_mask_radial(f, omega, F_MAX, OMEGA_MIN, OMEGA_MAX)
-    weights_b = weights * mask
-    v_sq, lam, I = solve_efficient_coding(
-        C, sigma_in, sigma_out, P0, weights_b, band_mask=mask,
-    )
-    return v_sq, I
-
-
-def _spatial_kernel_radial(v_sq, f, omega):
-    domega = np.gradient(omega)
-    v_s_sq = np.sum(v_sq * np.abs(domega)[None, :], axis=1) / (2 * np.pi)
-    v_s = np.sqrt(np.maximum(v_s_sq, 0.0))
-    f_fine = np.linspace(0.0, 6.0, 1024)
-    v_s_interp = np.interp(f_fine, f, v_s, left=v_s[0], right=0.0)
-    def vmag(k):
-        return np.interp(k, f_fine, v_s_interp, left=v_s_interp[0], right=0.0)
-    rx, ry, v_xy = spatial_kernel_2d(vmag, k_max=8.0, n_k=512)
-    r_radial, v_radial = radial_cross_section(v_xy, rx, ry)
-    return r_radial, v_radial
-
-
-def _temporal_kernel(v_sq, f, omega):
-    domega = np.gradient(omega)
-    energy_per_f = np.sum(v_sq * np.abs(domega)[None, :], axis=1)
-    i_peak_f = int(np.argmax(energy_per_f))
-    v_t_mag = np.sqrt(np.maximum(v_sq[i_peak_f, :], 0.0))
-    taper = soft_band_taper(omega, OMEGA_MIN, OMEGA_MAX, alpha=0.25)
-    v_t_smooth = v_t_mag * taper
-    floor = 1e-3 * max(v_t_smooth.max(), 1e-30)
-    v_t_smooth = np.maximum(v_t_smooth, floor)
-    t, h_t, _ = minimum_phase_temporal_filter(v_t_smooth, omega)
-    return t, h_t
-
-
 def fig3():
-    f, omega = hi_res_grid()
-
     sigma_out = 1.0
     P0 = 50.0
-    beta = 2.0
 
     sigma_in_fixed = 0.3
     D_sweep = np.geomspace(0.05, 50.0, 8)
@@ -101,24 +50,37 @@ def fig3():
     palette_D = parameter_palette(len(D_sweep), cmap="viridis")
     palette_S = parameter_palette(len(sigma_in_sweep), cmap="plasma")
 
-    for D, color in zip(D_sweep, palette_D):
-        v_sq, _ = _solve(f, omega, D, beta, sigma_in_fixed, sigma_out, P0)
-        r, v_r = _spatial_kernel_radial(v_sq, f, omega)
+    D_specs = drift_spectrum_specs(D_sweep)
+    D_results = run_many(
+        D_specs,
+        SolveConfig(sigma_in=sigma_in_fixed, sigma_out=sigma_out, P0=P0, grid="hi_res"),
+        kernels=True,
+    )
+    for D, color, result in zip(D_sweep, palette_D, D_results):
+        r, v_r = result.spatial_r, result.spatial_v
         v_r_n = v_r / max(np.max(np.abs(v_r)), 1e-30)
         ax_sp_D.plot(r, v_r_n, color=color, lw=1.3,
                      label=rf"$D={D:.2g}$")
-        t, h_t = _temporal_kernel(v_sq, f, omega)
+        t, h_t = result.temporal_t, result.temporal_v
         h_t_n = h_t / max(np.max(np.abs(h_t)), 1e-30)
         ax_t_D.plot(t, h_t_n, color=color, lw=1.3,
                     label=rf"$D={D:.2g}$")
 
-    for sin, color in zip(sigma_in_sweep, palette_S):
-        v_sq, _ = _solve(f, omega, D_fixed, beta, sin, sigma_out, P0)
-        r, v_r = _spatial_kernel_radial(v_sq, f, omega)
+    sigma_specs = drift_spectrum_specs([D_fixed] * len(sigma_in_sweep))
+    sigma_results = [
+        run_many(
+            [spec],
+            SolveConfig(sigma_in=sin, sigma_out=sigma_out, P0=P0, grid="hi_res"),
+            kernels=True,
+        )[0]
+        for spec, sin in zip(sigma_specs, sigma_in_sweep)
+    ]
+    for sin, color, result in zip(sigma_in_sweep, palette_S, sigma_results):
+        r, v_r = result.spatial_r, result.spatial_v
         v_r_n = v_r / max(np.max(np.abs(v_r)), 1e-30)
         ax_sp_S.plot(r, v_r_n, color=color, lw=1.3,
                      label=rf"$\sigma_\mathrm{{in}}={sin:.2g}$")
-        t, h_t = _temporal_kernel(v_sq, f, omega)
+        t, h_t = result.temporal_t, result.temporal_v
         h_t_n = h_t / max(np.max(np.abs(h_t)), 1e-30)
         ax_t_S.plot(t, h_t_n, color=color, lw=1.3,
                     label=rf"$\sigma_\mathrm{{in}}={sin:.2g}$")

@@ -18,30 +18,15 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 
-from src.spectra import drift_spectrum
-from src.solver import solve_efficient_coding
-from src.plotting import setup_style, radial_weights, band_mask_radial
-from src.params import F_MAX, OMEGA_MIN, OMEGA_MAX, hi_res_grid
+from src.pipeline import SolveConfig, run_many
+from src.plotting import setup_style, band_mask_radial
+from src.params import F_MAX, OMEGA_MIN, OMEGA_MAX
+from src.power_spectrum_library import drift_spectrum_specs
 
 setup_style()
 
 
-def _solve_grid(f, omega, D, beta, sigma_in, sigma_out, P0):
-    F = f[:, None]
-    W = omega[None, :]
-    C = drift_spectrum(F, W, D=D, beta=beta)
-    weights = radial_weights(f, omega)
-    mask = band_mask_radial(f, omega, F_MAX, OMEGA_MIN, OMEGA_MAX)
-    weights = weights * mask
-    v_sq, lam, I = solve_efficient_coding(C, sigma_in, sigma_out, P0,
-                                          weights, band_mask=mask)
-    return v_sq, I, mask
-
-
 def fig2():
-    f, omega = hi_res_grid()
-    omega_pos = omega[omega > 0]
-
     sigma_out = 1.0
     P0 = 50.0
 
@@ -56,28 +41,40 @@ def fig2():
                                           "left": 0.07, "right": 0.93,
                                           "top": 0.90, "bottom": 0.10})
 
-    row1 = []
-    for D in D_sweep:
-        v_sq, I, mask = _solve_grid(f, omega, D, beta=2.0,
-                                    sigma_in=sigma_in_fixed,
-                                    sigma_out=sigma_out, P0=P0)
-        row1.append((D, v_sq, I, mask))
+    row1_specs = drift_spectrum_specs(D_sweep)
+    row1_results = run_many(
+        row1_specs,
+        SolveConfig(
+            sigma_in=sigma_in_fixed, sigma_out=sigma_out, P0=P0,
+            grid="hi_res",
+        ),
+    )
+    row1 = [(spec.parameters["D"], result) for spec, result in zip(row1_specs, row1_results)]
 
-    row2 = []
-    for sin in sigma_in_sweep:
-        v_sq, I, mask = _solve_grid(f, omega, D_fixed, beta=2.0,
-                                    sigma_in=sin,
-                                    sigma_out=sigma_out, P0=P0)
-        row2.append((sin, v_sq, I, mask))
+    row2_specs = drift_spectrum_specs([D_fixed] * len(sigma_in_sweep))
+    row2_results = [
+        run_many(
+            [spec],
+            SolveConfig(sigma_in=sin, sigma_out=sigma_out, P0=P0, grid="hi_res"),
+        )[0]
+        for spec, sin in zip(row2_specs, sigma_in_sweep)
+    ]
+    row2 = [(sin, result) for sin, result in zip(sigma_in_sweep, row2_results)]
+
+    f = row1_results[0].f
+    omega = row1_results[0].omega
+    omega_pos = omega[omega > 0]
+    mask = band_mask_radial(f, omega, F_MAX, OMEGA_MIN, OMEGA_MAX)
 
     cmap = "viridis"
 
     def lims(rows, floor=1e-5):
-        v = np.concatenate([r[1].flatten() for r in rows])
+        v = np.concatenate([r[1].v_sq.flatten() for r in rows])
         v = v[np.isfinite(v) & (v > 0)]
         return floor * v.max(), v.max()
 
-    def panel(ax, v_sq, vmin, vmax, mask, title):
+    def panel(ax, result, vmin, vmax, title):
+        v_sq = result.v_sq
         v_disp = np.where(mask, v_sq, vmin)
         v_disp = np.maximum(v_disp, vmin)
         i_pos = omega > 0
@@ -96,14 +93,14 @@ def fig2():
         ax.set_title(title, pad=2, fontsize=8.5)
 
     vmin1, vmax1 = lims(row1)
-    for ax, (D, v_sq, I, mask) in zip(axes[0], row1):
-        panel(ax, v_sq, vmin1, vmax1, mask,
-              rf"$D = {D:.2g}$,  $I^* = {I:.2f}$")
+    for ax, (D, result) in zip(axes[0], row1):
+        panel(ax, result, vmin1, vmax1,
+              rf"$D = {D:.2g}$,  $I^* = {result.I:.2f}$")
 
     vmin2, vmax2 = lims(row2)
-    for ax, (sin, v_sq, I, mask) in zip(axes[1], row2):
-        panel(ax, v_sq, vmin2, vmax2, mask,
-              rf"$\sigma_\mathrm{{in}} = {sin:.2g}$,  $I^* = {I:.2f}$")
+    for ax, (sin, result) in zip(axes[1], row2):
+        panel(ax, result, vmin2, vmax2,
+              rf"$\sigma_\mathrm{{in}} = {sin:.2g}$,  $I^* = {result.I:.2f}$")
 
     for ax in axes[-1]:
         ax.set_xlabel(r"$f$ (cyc/u)")

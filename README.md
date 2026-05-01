@@ -103,6 +103,21 @@ python run_all.py --with-cell-learning --with-cell-story
 python scripts/check_aliasing_negligible.py       # sanity check
 ```
 
+## Adding a movement spectrum
+
+New analyses should define spectra once and then reuse the shared pipeline.
+The intended path is:
+
+1. Add or reuse a `Spectrum` class in `src/spectra.py` with a `C(f, omega)` method.
+2. Add a readable factory in `src/power_spectrum_library.py` that returns
+   `SpectrumSpec` objects with keys, labels, parameters, and references.
+3. Register the factory in `SPECTRUM_SETS` if scripts should request it by name.
+4. Run it with `src.pipeline.run_many(...)` or convert the specs to cell-class
+   conditions with `conditions_from_spectrum_specs(...)`.
+
+Figure scripts should specify which spectrum set they need; they should not
+rebuild grids, masks, Lagrange multiplier solves, or kernel reconstruction.
+
 ## What each figure shows
 
 **Figure 1.** Brownian drift Lorentzian, stationary saccade controls,

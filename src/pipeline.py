@@ -15,8 +15,8 @@ Conventions for the output Result:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Optional
+from dataclasses import dataclass
+from typing import Iterable, Optional, Sequence
 
 import numpy as np
 
@@ -30,6 +30,32 @@ from src.kernels import (
     soft_band_taper,
 )
 from src.params import F_MAX, OMEGA_MIN, OMEGA_MAX, hi_res_grid, fast_grid
+
+
+@dataclass
+class SolveConfig:
+    """Shared efficient-coding solve settings.
+
+    Figure scripts should normally construct one of these and pass it to
+    ``run_many`` instead of repeating grid/band/noise/budget boilerplate.
+    """
+
+    sigma_in: float = 0.3
+    sigma_out: float = 1.0
+    P0: float = 50.0
+    grid: str = "fast"
+    band: tuple = (F_MAX, OMEGA_MIN, OMEGA_MAX)
+
+
+@dataclass
+class KernelConfig:
+    """Shared kernel-reconstruction settings."""
+
+    k_max: float = 8.0
+    n_k: int = 512
+    n_f_fine: int = 1024
+    taper_alpha: float = 0.25
+    floor_rel: float = 1e-3
 
 
 @dataclass
@@ -108,6 +134,72 @@ def run(
     )
 
 
+def run_config(spectrum: Spectrum, config: SolveConfig) -> Result:
+    """Run a single spectrum with a reusable ``SolveConfig``."""
+    return run(
+        spectrum,
+        sigma_in=config.sigma_in,
+        sigma_out=config.sigma_out,
+        P0=config.P0,
+        grid=config.grid,
+        band=config.band,
+    )
+
+
+def _spec_spectrum(spec):
+    """Return the Spectrum carried by either a raw Spectrum or SpectrumSpec."""
+    return getattr(spec, "spectrum", spec)
+
+
+def run_many(
+    specs: Sequence,
+    config: Optional[SolveConfig] = None,
+    *,
+    kernels: bool = False,
+    kernel_config: Optional[KernelConfig] = None,
+) -> list[Result]:
+    """Run the common efficient-coding pipeline for a collection of spectra.
+
+    ``specs`` may be raw ``Spectrum`` instances or richer objects with a
+    ``.spectrum`` attribute, such as ``power_spectrum_library.SpectrumSpec``.
+    """
+    if config is None:
+        config = SolveConfig()
+    if kernel_config is None:
+        kernel_config = KernelConfig()
+    results: list[Result] = []
+    for spec in specs:
+        result = run_config(_spec_spectrum(spec), config)
+        if kernels:
+            extract_kernels(
+                result,
+                k_max=kernel_config.k_max,
+                n_k=kernel_config.n_k,
+                n_f_fine=kernel_config.n_f_fine,
+                taper_alpha=kernel_config.taper_alpha,
+                floor_rel=kernel_config.floor_rel,
+            )
+        results.append(result)
+    return results
+
+
+def sweep_parameter(
+    factory,
+    values: Iterable[float],
+    config: Optional[SolveConfig] = None,
+    *,
+    kernels: bool = False,
+    kernel_config: Optional[KernelConfig] = None,
+) -> list[Result]:
+    """Build spectra from ``factory(value)`` and run the shared pipeline."""
+    return run_many(
+        [factory(value) for value in values],
+        config,
+        kernels=kernels,
+        kernel_config=kernel_config,
+    )
+
+
 def extract_spatial_kernel(result: Result, k_max: float = 8.0,
                            n_k: int = 512, n_f_fine: int = 1024) -> Result:
     """Reconstruct the 1D radial spatial kernel from |v*|^2 and store it
@@ -169,5 +261,56 @@ def extract_kernels(result: Result, **kw) -> Result:
     return result
 
 
-__all__ = ["Result", "run", "extract_spatial_kernel",
-           "extract_temporal_kernel", "extract_kernels"]
+def spatial_kernel_slice(
+    result: Result,
+    omega0: float,
+    *,
+    k_max: float = 8.0,
+    n_k: int = 512,
+    n_f_fine: int = 1024,
+):
+    """Spatial radial kernel at the temporal bin nearest ``omega0``."""
+    i_omega0 = int(np.argmin(np.abs(result.omega - float(omega0))))
+    v_mag_at_w0 = np.sqrt(np.maximum(result.v_sq[:, i_omega0], 0.0))
+    f_fine = np.linspace(0.0, result.f.max() * 1.2, n_f_fine)
+    v_interp = np.interp(f_fine, result.f, v_mag_at_w0, left=v_mag_at_w0[0], right=0.0)
+
+    def vmag(k):
+        return np.interp(k, f_fine, v_interp, left=v_interp[0], right=0.0)
+
+    rx, ry, v_xy = spatial_kernel_2d(vmag, k_max=k_max, n_k=n_k)
+    return radial_cross_section(v_xy, rx, ry)
+
+
+def temporal_kernel_slice(
+    result: Result,
+    f0: float,
+    *,
+    taper_alpha: float = 0.25,
+    floor_rel: float = 1e-3,
+):
+    """Minimum-phase temporal kernel at the spatial bin nearest ``f0``."""
+    i_f0 = int(np.argmin(np.abs(result.f - float(f0))))
+    v_mag_at_f0 = np.sqrt(np.maximum(result.v_sq[i_f0, :], 0.0))
+    taper = soft_band_taper(result.omega, OMEGA_MIN, OMEGA_MAX, alpha=taper_alpha)
+    v_t_smooth = v_mag_at_f0 * taper
+    floor = floor_rel * max(v_t_smooth.max(), 1e-30)
+    v_t_smooth = np.maximum(v_t_smooth, floor)
+    t, h_t, _ = minimum_phase_temporal_filter(v_t_smooth, result.omega)
+    return t, h_t
+
+
+__all__ = [
+    "SolveConfig",
+    "KernelConfig",
+    "Result",
+    "run",
+    "run_config",
+    "run_many",
+    "sweep_parameter",
+    "extract_spatial_kernel",
+    "extract_temporal_kernel",
+    "extract_kernels",
+    "spatial_kernel_slice",
+    "temporal_kernel_slice",
+]

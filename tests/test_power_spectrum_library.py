@@ -13,7 +13,12 @@ from src.power_spectrum_library import (
     canonical_positive_cycle_view,
     cycle_decomposition_panels,
     cycle_solver_spectra,
+    drift_spectrum_specs,
+    equivalent_saccade_drift_pair_specs,
+    get_spectrum_set,
+    list_spectrum_sets,
     spectrum_comparison_specs,
+    spectrum_comparison_spec_objects,
     spectrum_library_panels,
 )
 
@@ -105,6 +110,42 @@ def test_spectrum_comparison_specs_use_shared_cycle_solver_spectra():
         cycle.C_late_total[:, nonzero],
         rtol=1e-12,
     )
+
+
+def test_named_spectrum_sets_return_readable_specs():
+    available = list_spectrum_sets()
+    assert "drift_sweep" in available
+
+    specs = get_spectrum_set("drift_sweep", D_values=[0.5, 2.0])
+    assert [s.key for s in specs] == ["drift_D_0.5", "drift_D_2"]
+    assert [s.family for s in specs] == ["drift", "drift"]
+    assert [s.parameters["D"] for s in specs] == [0.5, 2.0]
+    assert all(hasattr(s.spectrum, "C") for s in specs)
+
+
+def test_spectrum_comparison_spec_objects_match_legacy_tuples():
+    objects = spectrum_comparison_spec_objects(include_controls=True)
+    tuples = spectrum_comparison_specs(include_controls=True)
+
+    assert [s.label for s in objects] == [row[0] for row in tuples]
+    assert [s.spectrum.describe() for s in objects] == [row[1].describe() for row in tuples]
+    assert [s.color for s in objects] == [row[2] for row in tuples]
+
+
+def test_equivalent_saccade_drift_pairs_encode_D_eff():
+    pairs = equivalent_saccade_drift_pair_specs([0.3, 2.5], lam=3.0)
+    for sac, drift in pairs:
+        A = sac.parameters["A"]
+        expected = np.pi ** 2 * 3.0 * A ** 2
+        np.testing.assert_allclose(drift.parameters["D"], expected)
+        assert sac.family == "saccade"
+        assert drift.family == "equivalent_drift"
+
+
+def test_direct_spec_factories_are_plain_to_extend():
+    specs = drift_spectrum_specs([1.0])
+    assert specs[0].label == r"$D=1$"
+    assert specs[0].title == r"$D = 1$"
 
 
 def test_cycle_reconstruction_figures_use_shared_spectrum_entrypoints():

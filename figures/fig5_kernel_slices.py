@@ -14,61 +14,20 @@ sys.path.insert(0, ".")
 import numpy as np
 import matplotlib.pyplot as plt
 
-from src.spectra import drift_spectrum
-from src.solver import solve_efficient_coding
-from src.kernels import (
-    spatial_kernel_2d,
-    radial_cross_section,
-    minimum_phase_temporal_filter,
-    soft_band_taper,
+from src.pipeline import (
+    SolveConfig,
+    run_many,
+    spatial_kernel_slice,
+    temporal_kernel_slice,
 )
-from src.plotting import (
-    setup_style,
-    radial_weights,
-    band_mask_radial,
-)
-from src.params import F_MAX, OMEGA_MIN, OMEGA_MAX, hi_res_grid
+from src.plotting import setup_style
+from src.params import F_MAX, OMEGA_MIN, OMEGA_MAX
+from src.power_spectrum_library import drift_spectrum_specs
 
 setup_style()
 
 
-def _solve(f, omega, D, beta, sigma_in, sigma_out, P0):
-    F = f[:, None]
-    W = omega[None, :]
-    C = drift_spectrum(F, W, D=D, beta=beta)
-    weights = radial_weights(f, omega)
-    mask = band_mask_radial(f, omega, F_MAX, OMEGA_MIN, OMEGA_MAX)
-    weights_b = weights * mask
-    v_sq, lam, I = solve_efficient_coding(
-        C, sigma_in, sigma_out, P0, weights_b, band_mask=mask,
-    )
-    return v_sq, I
-
-
-def _spatial_slice(v_sq, f, i_omega0):
-    v_mag_at_w0 = np.sqrt(np.maximum(v_sq[:, i_omega0], 0.0))
-    f_fine = np.linspace(0.0, 6.0, 1024)
-    v_interp = np.interp(f_fine, f, v_mag_at_w0, left=v_mag_at_w0[0], right=0.0)
-    def vmag(k):
-        return np.interp(k, f_fine, v_interp, left=v_interp[0], right=0.0)
-    rx, ry, v_xy = spatial_kernel_2d(vmag, k_max=8.0, n_k=512)
-    r_radial, v_radial = radial_cross_section(v_xy, rx, ry)
-    return r_radial, v_radial
-
-
-def _temporal_slice(v_sq, omega, i_f0):
-    v_mag_at_f0 = np.sqrt(np.maximum(v_sq[i_f0, :], 0.0))
-    taper = soft_band_taper(omega, OMEGA_MIN, OMEGA_MAX, alpha=0.25)
-    v_t_smooth = v_mag_at_f0 * taper
-    floor = 1e-3 * max(v_t_smooth.max(), 1e-30)
-    v_t_smooth = np.maximum(v_t_smooth, floor)
-    t, h_t, _ = minimum_phase_temporal_filter(v_t_smooth, omega)
-    return t, h_t
-
-
 def fig5():
-    f, omega = hi_res_grid()
-
     D = 5.0
     beta = 2.0
     sigma_out = 1.0
@@ -78,9 +37,6 @@ def fig5():
 
     omega_slices = np.geomspace(1.0, 300.0, 8)
     f_slices = np.geomspace(0.08, 3.0, 8)
-
-    omega_indices = [int(np.argmin(np.abs(omega - w))) for w in omega_slices]
-    f_indices = [int(np.argmin(np.abs(f - fv))) for fv in f_slices]
 
     cmap_omega = plt.get_cmap("viridis")
     cmap_f = plt.get_cmap("plasma")
@@ -103,14 +59,23 @@ def fig5():
                      "top": 0.93, "bottom": 0.08},
     )
 
+    specs = drift_spectrum_specs([D] * len(sigma_in_levels))
+    results = [
+        run_many(
+            [spec],
+            SolveConfig(sigma_in=sin, sigma_out=sigma_out, P0=P0, grid="hi_res"),
+        )[0]
+        for spec, sin in zip(specs, sigma_in_levels)
+    ]
+
     for row, sin in enumerate(sigma_in_levels):
-        v_sq, I_star = _solve(f, omega, D, beta, sin, sigma_out, P0)
+        result = results[row]
 
         ax_sp = axes[row, 0]
         ax_t = axes[row, 1]
 
-        for w0, i_w, color in zip(omega_slices, omega_indices, omega_colors):
-            r, v_r = _spatial_slice(v_sq, f, i_w)
+        for w0, color in zip(omega_slices, omega_colors):
+            r, v_r = spatial_kernel_slice(result, w0)
             v_r_n = v_r / max(np.max(np.abs(v_r)), 1e-30)
             f_hz = w0 / (2 * np.pi)
             ax_sp.plot(r, v_r_n, color=color, lw=1.3,
@@ -122,14 +87,14 @@ def fig5():
         ax_sp.set_ylabel(r"$v_s(r;\,\omega_0) / \max$")
         ax_sp.set_title(
             rf"Spatial slices, $\sigma_\mathrm{{in}}={sin}$;  "
-            rf"$I^* = {I_star:.2f}$ nats",
+            rf"$I^* = {result.I:.2f}$ nats",
             pad=2,
         )
         ax_sp.legend(loc="upper right", handlelength=1.2, fontsize=6.5,
                      frameon=False, ncol=2)
 
-        for f0, i_f, color in zip(f_slices, f_indices, f_colors):
-            t, h_t = _temporal_slice(v_sq, omega, i_f)
+        for f0, color in zip(f_slices, f_colors):
+            t, h_t = temporal_kernel_slice(result, f0)
             h_t_n = h_t / max(np.max(np.abs(h_t)), 1e-30)
             ax_t.plot(t, h_t_n, color=color, lw=1.3,
                       label=rf"$f_0={f0:.2g}$")

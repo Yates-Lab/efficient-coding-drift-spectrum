@@ -2,7 +2,7 @@
 
 Three companion figures:
   1a  main examples: drift sweep over D; saccade sweep over A.
-  1b  Boi cycle decomposition: early vs late fixation.
+  1b  Rucci/Boi cycle decomposition: early vs late fixation.
   1c  comprehensive library: diffusion, saccades, early/late fixation cycle,
       linear velocity distribution.
 
@@ -24,9 +24,11 @@ import matplotlib as mpl
 from src.spectra import (
     DriftSpectrum,
     SaccadeSpectrum,
-    LinearMotionSpectrum,
-    BoiEarlyCleanApprox,
-    BoiLateDriftApprox,
+)
+from src.power_spectrum_library import (
+    cycle_decomposition_panels,
+    spectrum_library_panels,
+    overlay_curve_hz,
 )
 from src.plotting import setup_style
 
@@ -38,7 +40,7 @@ F_MIN, F_MAX = 0.1, 4.0
 OMEGA_MIN, OMEGA_MAX = 0.5, 400.0
 CMAP = "magma"
 N_LEVELS = 24
-FLOOR = 1e-5  # vmin = FLOOR * shared_vmax
+FLOOR = 1e-6  # vmin = FLOOR * shared_vmax
 
 
 def make_grid(n_f=200, n_omega=200):
@@ -69,6 +71,31 @@ def panel_loglog(ax, f, omega, C, vmin, vmax):
     ax.set_yscale("log")
     ax.set_xlim(F_MIN, F_MAX)
     ax.set_ylim(OMEGA_MIN, OMEGA_MAX)
+    return cf
+
+
+def panel_loglog_hz(ax, panel, vmin, vmax):
+    """Plot a shared SpectrumPanel on log f / log temporal-Hz axes."""
+    Z = np.asarray(panel.C).T
+    Z = np.where(np.isfinite(Z) & (Z > 0), Z, vmin)
+    Z = np.maximum(Z, vmin)
+    levels = np.geomspace(vmin, vmax, N_LEVELS)
+    cf = ax.contourf(
+        panel.f,
+        panel.temporal_hz,
+        Z,
+        levels=levels,
+        norm=mpl.colors.LogNorm(vmin=vmin, vmax=vmax),
+        cmap=CMAP,
+        extend="both",
+    )
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    ax.set_xlim(panel.f.min(), panel.f.max())
+    ax.set_ylim(panel.temporal_hz.min(), panel.temporal_hz.max())
+    overlay = overlay_curve_hz(panel)
+    if overlay is not None:
+        ax.plot(overlay[0], overlay[1], color="white", lw=0.8, alpha=0.6)
     return cf
 
 
@@ -151,46 +178,35 @@ def fig1a():
 
 
 def fig1b():
-    """Boi cycle decomposition: early vs late fixation."""
-    f, omega = make_grid()
-
-    D_late = 0.05
-    early = BoiEarlyCleanApprox(
-        mean_A=4.4, sd_A=1.3, A_min=1.0, A_max=10.0,
-    ).C(f, omega)
-    late = BoiLateDriftApprox(D=D_late).C(f, omega)
-
-    panels = [
-        ("Early fixation\n(saccade transient)", early, "none", None),
-        (f"Late fixation\n(drift, $D={D_late:g}$)", late, "drift_cycles", D_late),
-    ]
-
-    vmin, vmax = shared_lims([p[1] for p in panels])
+    """Trace-based Rucci/Boi cycle decomposition: early vs late fixation."""
+    panels = cycle_decomposition_panels(normalize="panel")
+    vmin, vmax = FLOOR, 1.0
 
     fig, axes = plt.subplots(
         1, 2, figsize=(6.0, 3.3), sharex=True, sharey=True,
         gridspec_kw={"wspace": 0.22},
     )
 
-    for ax, (title, C, kind, param) in zip(axes, panels):
-        panel_loglog(ax, f, omega, C, vmin, vmax)
-        ax.set_title(title, pad=4)
-        if kind == "drift":
-            overlay_drift(ax, f, param)
-        elif kind == "drift_cycles":
-            overlay_drift_cycles(ax, f, param)
+    for ax, panel in zip(axes, panels):
+        panel_loglog_hz(ax, panel, vmin, vmax)
+        ax.axhline(8.0, color="white", lw=0.6, ls=":", alpha=0.8)
+        ax.set_title(panel.title, pad=4)
 
     for ax in axes:
-        ax.set_xlabel(r"$f$ (cycles/unit)")
-    axes[0].set_ylabel(r"$\omega$ (rad/s)")
+        ax.set_xlabel(r"spatial frequency $f$ (cpd)")
+    axes[0].set_ylabel("temporal frequency (Hz)")
 
     fig.subplots_adjust(left=0.10, right=0.88, top=0.82, bottom=0.16)
     fig.suptitle(
-        r"Figure 1b  Boi cycle decomposition $C_\theta(f, \omega)$: "
+        r"Figure 1b  Rucci/Boi cycle decomposition $C_\theta(f, \omega)$: "
         r"early vs late fixation",
         y=0.99, fontsize=10.5,
     )
-    add_colorbar(fig, [0.90, 0.18, 0.018, 0.64], CBAR_LABEL)
+    add_colorbar(
+        fig,
+        [0.90, 0.18, 0.018, 0.64],
+        r"$C_\theta(f,\omega) / \max_\mathrm{panel}\,C_\theta$",
+    )
 
     out = "outputs/fig1b_boi_cycle.png"
     fig.savefig(out)
@@ -200,58 +216,32 @@ def fig1b():
 
 def fig1c():
     """Comprehensive library: diffusion, saccades, early/late fixation, linear velocity."""
-    f, omega = make_grid()
-
-    D = 2.0
-    D_late = 0.05
-    s_lin = 1.0
-    panels = [
-        ("Diffusion",
-         DriftSpectrum(D=D).C(f, omega),
-         "drift", D),
-        ("Saccades",
-         SaccadeSpectrum(A=2.5, lam=3.0).C(f, omega),
-         "none", None),
-        ("Early fixation cycle",
-         BoiEarlyCleanApprox(
-             mean_A=4.4, sd_A=1.3, A_min=1.0, A_max=10.0,
-         ).C(f, omega),
-         "none", None),
-        ("Late fixation cycle",
-         BoiLateDriftApprox(D=D_late).C(f, omega),
-         "drift_cycles", D_late),
-        ("Linear velocity distribution",
-         LinearMotionSpectrum(s=s_lin).C(f, omega),
-         "linear", s_lin),
-    ]
-
-    vmin, vmax = shared_lims([p[1] for p in panels])
+    panels = spectrum_library_panels(normalize="panel")
+    vmin, vmax = FLOOR, 1.0
 
     fig, axes = plt.subplots(
         1, 5, figsize=(12.5, 3.1), sharex=True, sharey=True,
         gridspec_kw={"wspace": 0.20},
     )
 
-    for ax, (title, C, kind, param) in zip(axes, panels):
-        panel_loglog(ax, f, omega, C, vmin, vmax)
-        ax.set_title(title, pad=4)
-        if kind == "drift":
-            overlay_drift(ax, f, param)
-        elif kind == "drift_cycles":
-            overlay_drift_cycles(ax, f, param)
-        elif kind == "linear":
-            overlay_linear(ax, f, param)
+    for ax, panel in zip(axes, panels):
+        panel_loglog_hz(ax, panel, vmin, vmax)
+        ax.set_title(panel.title, pad=4)
 
     for ax in axes:
-        ax.set_xlabel(r"$f$ (cycles/unit)")
-    axes[0].set_ylabel(r"$\omega$ (rad/s)")
+        ax.set_xlabel(r"spatial frequency $f$ (cpd)")
+    axes[0].set_ylabel("temporal frequency (Hz)")
 
     fig.subplots_adjust(left=0.06, right=0.93, top=0.84, bottom=0.18)
     fig.suptitle(
         r"Figure 1c  spectrum library $C_\theta(f, \omega)$",
         y=0.99, fontsize=10.5,
     )
-    add_colorbar(fig, [0.945, 0.20, 0.010, 0.60], CBAR_LABEL)
+    add_colorbar(
+        fig,
+        [0.945, 0.20, 0.010, 0.60],
+        r"$C_\theta(f,\omega) / \max_\mathrm{panel}\,C_\theta$",
+    )
 
     out = "outputs/fig1c_library.png"
     fig.savefig(out)

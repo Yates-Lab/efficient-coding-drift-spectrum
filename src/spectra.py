@@ -22,6 +22,12 @@ Two complementary APIs are provided:
        BoiCycleEarlySpectrum          Boi et al. 2017, early-fixation regime
        BoiCycleLateSpectrum           Boi et al. 2017, late-fixation regime
 
+The operational Rucci/Boi saccade-fixation cycle reconstruction lives in
+src.rucci_cycle_spectra.  It estimates Q_saccade and Q_drift from explicit
+eye-position traces with the same orientation-averaged Fourier-power estimator.
+The stationary Poisson saccade formulas in this module are kept as legacy
+analytic controls.
+
 Conventions
 -----------
 - f: spatial frequency magnitude [cycles per unit length]

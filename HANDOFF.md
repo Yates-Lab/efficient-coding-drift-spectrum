@@ -1,5 +1,36 @@
 # Project handoff: efficient coding for moving sensors with saccades
 
+## April 2026 update
+
+The old stationary Poisson saccade mechanism described below is now a legacy
+analytic control, not the main fixation-cycle model. The operational
+Rucci/Boi path is implemented in `src/rucci_cycle_spectra.py`: it generates
+explicit isolated saccade traces and OU-drift traces, estimates both
+redistribution functions with the same orientation-averaged Fourier-power
+estimator, and returns `C_early_mod` / `C_early_total` and `C_late_total`.
+Late drift defaults to the smooth Brownian displacement-probability limit
+implied by the OU trace parameters; the raw finite-window trace periodogram is
+still available with `drift_mode="trace"` but shows estimator banding unless
+heavily averaged/smoothed.
+
+Use `figures/fig7_rucci_cycle_spectra.py` for the trace-spectrum diagnostic.
+For all saccade/fixation-cycle figures, use `src.power_spectrum_library` for
+both figure-facing spectrum panels and solver inputs. In particular,
+`cycle_decomposition_panels()` / `spectrum_library_panels()` are the display
+path, and `cycle_solver_spectra()` / `spectrum_comparison_specs()` are the
+filter-reconstruction path. Do not regenerate per-figure Rucci-style spectra,
+because that makes Figure 1b/1c, Figure 6, Q1, and Q3 drift away from the
+Figure 7 cycle split.
+
+Cell-class learning follows the same rule. The production condition stack is
+`build_cell_learning_conditions()`, which yields only
+`early_cycle = I(f)Q_saccade` and `late_cycle = I(f)Q_drift` from the
+canonical Figure 7 wrappers. Do not add per-figure or per-script movement
+spectrum builders to the cell-learning path.
+
+The older notes below are retained for context about the analytic control and
+previous figures.
+
 ## Where we are
 
 Working codebase at `/mnt/user-data/outputs/efficient_coding.tar.gz` (also available unbundled at `/mnt/user-data/outputs/efficient_coding/`). 39 tests passing. Eight figures produced. The saccade extension is implemented correctly and matches Mostofi et al. (2020) predictions to within ~5%.

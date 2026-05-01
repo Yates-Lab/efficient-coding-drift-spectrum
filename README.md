@@ -10,8 +10,9 @@ Given a power-law image spectrum
 
     C_I(f) = A / (f^2 + k0^2)^(β/2),
 
-a movement model (Brownian drift, Gaussian linear motion, saccades, or a
-combination), and a fixed band B = { (f, ω) : 0 ≤ f ≤ f_max,
+a movement model (Brownian drift, Gaussian linear motion, stationary
+saccade controls, or trace-based Rucci/Boi fixation-cycle spectra), and a
+fixed band B = { (f, ω) : 0 ≤ f ≤ f_max,
 ω_min ≤ |ω| ≤ ω_max }, this codebase
 
 1. constructs the spatiotemporal input spectrum C_θ(f, ω) (`src/spectra.py`);
@@ -25,11 +26,23 @@ combination), and a fixed band B = { (f, ω) : 0 ≤ f ≤ f_max,
 3. reconstructs causal minimum-phase temporal kernels and 2D spatial
    kernels from the magnitude solution (`src/kernels.py`).
 
-The saccade redistribution kernel uses a damped-harmonic-oscillator
-template (zeta = 0.6, peak velocity at 40 ms) that reproduces the
-trajectories in Mostofi et al. (2020), Current Biology. The trajectory
-is angle-averaged over saccade direction to match the rotationally-
-symmetric input spectrum.
+The main fixation-cycle path is trace based (`src/rucci_cycle_spectra.py`).
+It generates isolated saccade traces and smooth drift traces, estimates
+both movement redistribution spectra with the same orientation-averaged
+Fourier-power estimator, and returns the two inputs needed by the solver:
+early fixation `C_early = I(f) Q_saccade` and late fixation
+`C_late = I(f) Q_drift`. By default, late drift uses the smooth Brownian
+displacement-probability limit implied by the OU trace parameters, avoiding
+finite-window periodogram bands. The older stationary Poisson saccade formulas
+remain in `src/spectra.py` as analytic controls.
+
+`make_figure7_rucci_cycle_spectra()` is the canonical Rucci-style cycle
+source for the paper figures. Figure-facing spectrum panels are centralized in
+`src/power_spectrum_library.py`, so Figure 1b and 1c use the same positive-Hz
+Figure 7 arrays. Figure 6, Q1, and Q3 get their solver inputs from
+`cycle_solver_spectra()` / `spectrum_comparison_specs()` in that same module,
+so filter reconstructions and spectrum panels stay tied to the same cached
+Figure 7 cycle object instead of regenerating per-figure trace estimates.
 
 The optimization is done on the direct (unaliased) spectrum, following
 the appendix's working assumption that the m=0 copy dominates. See the
@@ -40,7 +53,12 @@ the appendix's working assumption that the m=0 copy dominates. See the
 ```
 src/
     spectra.py     drift, Gaussian linear motion, saccade redistribution,
-                   combined drift+motion spectra
+                   combined drift+motion spectra, analytic controls
+    rucci_cycle_spectra.py
+                   trace-generated Rucci/Boi early and late cycle spectra
+    power_spectrum_library.py
+                   shared Figure 1b/1c panels and solver spectra from the
+                   canonical Figure 7 cycle source
     solver.py      KKT solver, mutual information, water-filling reduction
     kernels.py     cepstral min-phase temporal filter, 2D spatial kernel,
                    soft-band Tukey taper
@@ -57,11 +75,16 @@ figures/
                                  kernels under drift
     fig4_information_vs_D.py     I*(D) inverted-U for varying σ_in
     fig5_kernel_slices.py        kernels at fixed ω₀ and f₀ slices
-    fig6_saccade_kernels.py      spatial and temporal kernels under
-                                 saccades, sweeping A and σ_in
+    fig6_saccade_kernels.py      spatial and temporal kernels under the
+                                 Rucci/Boi early and late cycle spectra
     fig6b_saccade_diagnostics.py  diagnostic: 2D Q kernel, spatial /
                                  temporal profiles, and saccade-vs-drift
                                  spectrum comparison
+    fig7_rucci_cycle_spectra.py   trace-estimated Q and C for early saccade
+                                 and late drift cycle regimes
+    figQ1_spectrum_library.py     supplemental spectrum/solver library
+    figQ2_information_sweeps.py   supplemental information sweeps
+    figQ3_magno_parvo.py          Rucci/Boi cycle kernels and summary
 scripts/
     check_aliasing_negligible.py validation that the m=0 copy assumption
                                  is acceptable for the band/parameters used
@@ -73,23 +96,19 @@ outputs/   PNG artifacts at 320 dpi
 ```bash
 pip install numpy scipy matplotlib pytest
 
-python -m pytest tests/                           # 39 tests, ~3 s
-python figures/fig1_power_spectra.py
-python figures/fig2_optimal_filter.py
-python figures/fig3_kernels.py
-python figures/fig4_information_vs_D.py
-python figures/fig5_kernel_slices.py
-python figures/fig6_saccade_kernels.py
-python figures/fig6b_saccade_diagnostics.py
+python run_all.py                                 # tests + all figure scripts
+python run_all.py --with-cell-learning --with-cell-story
+                                                  # full production artifacts
 
 python scripts/check_aliasing_negligible.py       # sanity check
 ```
 
 ## What each figure shows
 
-**Figure 1.** Brownian drift Lorentzian and Gaussian-linear-motion
-spectra, swept over D, β, and s. The white line marks the characteristic
-crossover ω ∝ Df² (drift) or ω = sf (linear motion).
+**Figure 1.** Brownian drift Lorentzian, stationary saccade controls,
+Gaussian-linear-motion spectra, and the trace-based Rucci/Boi early/late
+cycle decomposition. The white line marks characteristic crossovers
+where they are meaningful.
 
 **Figure 2.** Optimal filter |v*(f, ω)|^2 in two parameter sweeps. Top
 row varies D from 0.05 to 50 at σ_in = 0.3; the band of high-gain
@@ -122,20 +141,10 @@ across all noise levels; D* shifts to higher values as σ_in grows.
 slices broaden in space; high-f₀ slices peak earlier in time.
 
 **Figure 6.** Spatial and temporal kernels of the optimal filter under
-saccades, sweeping amplitude A from 0.3° (microsaccade) to 7° (large
-natural saccade) at fixed σ_in = 0.3, and sweeping σ_in from 0.03 to 2
-at the median amplitude A = 2.5°. The saccade input spectrum is
-C_sac(f, ω; A) = C_I(f) · Q_sac(f, ω; A), where Q_sac is computed via
-direct numerical integration of the angle-averaged template Fourier
-transform.
-
-The spatial kernel barely changes with A — saccade amplitude controls
-which spatial frequencies get redistributed, but the surviving spatial
-structure after band-limited optimization is similar across amplitudes.
-The temporal kernel shows a strong graded effect: microsaccades produce
-biphasic kernels with a slow rebound (sensitive to low-frequency
-modulations they expose), while large saccades produce sharply-peaked
-fast kernels (tuned to the high-spatial-frequency saturation regime).
+the canonical Figure 7 trace-based Rucci/Boi cycle spectra. The early condition uses
+`C_early_mod = I(f) Q_saccade_mod`; the late condition uses
+`C_late_total = I(f) Q_drift_total`. The figure sweeps σ_in and compares
+the resulting early and late spatial/temporal kernels.
 
 **Figure 6b (diagnostic).** Sanity check on the saccade redistribution
 kernel Q_sac.
@@ -153,16 +162,18 @@ The figure also prints numerical sanity checks: low-f log-log slope
 (predicted 2.0; measured 1.98), and 1/A scaling of the crossover
 (predicted ratio 4.0 between A=1° and A=4°; measured 4.01).
 
-**Note on the trajectory window.** The saccade transient is observed
-over a finite time window. Without windowing, the FFT picks up sinc
-side-lobes from the steady-state portion of u(t) (which sits at
-u = 1 from ~80 ms post-saccade to the window edge). The default
-implementation applies a Tukey window of half-width 200 ms with a
-100 ms cosine taper on each side, representing the natural
-inter-saccadic interval. This kills the spurious lobes while
-preserving the saccade's spectral content. The window parameters are
-exposed as keyword arguments; `test_saccade_window_kills_sinc_lobes`
-quantifies the improvement.
+**Figure 7.** The trace-based Rucci/Boi cycle spectra used for the
+early-vs-late fixation question. It plots `Q_saccade_mod`,
+`I(f) Q_saccade_mod`, `Q_drift_total`, and `I(f) Q_drift_total`; it also
+saves `outputs/rucci_cycle_spectra_demo.npz`. This same source spectrum is
+used by the other cycle figures through `src.power_spectrum_library`.
+
+**Note on finite-window estimation.** The trace-based saccade estimator
+uses finite 512 ms saccade-centered segments, matching the Rucci/Mostofi
+procedure. Small synthetic sample counts can reveal periodogram sidelobes,
+so the implementation applies mild temporal smoothing while preserving
+row-wise temporal power. Late drift defaults to the smooth Brownian
+displacement-probability limit implied by the OU trace parameters.
 
 ## Aliasing
 
@@ -209,7 +220,7 @@ optimisation solves.
 
 ## Validation
 
-All 39 tests pass on numpy 2.4 / scipy 1.17. The suite covers:
+All 45 tests pass in the local environment. The suite covers:
 
 - spectrum normalisation (drift Lorentzian integrates to C_I(f)) and
   power-preservation in ω for both drift and linear motion;
@@ -229,3 +240,52 @@ All 39 tests pass on numpy 2.4 / scipy 1.17. The suite covers:
   response (peak < 0.3 s for the test band);
 - analytic agreement of 2D spatial-kernel widths and peak values for a
   Gaussian input.
+- trace-based Rucci/Boi cycle generation, image-factorization, total vs
+  modulated saccade spectra, and `ArraySpectrum` compatibility with the
+  existing pipeline.
+- shared figure-facing spectrum panels, including exact reuse of the Figure 7
+  early/late cycle arrays in Figure 1b and Figure 1c.
+
+
+## Cell class learning
+
+The production cell-class workflow uses the fast optimizer by default. It keeps
+the same information objective and budget normalization as the reference
+optimizer, but runs only active in-band frequencies, initializes from the oracle
+filter stack, supports `device=auto`, and uses early stopping. Its default
+condition stack is the canonical Figure 7 Rucci/Boi cycle split:
+`early_cycle = I(f)Q_saccade` and `late_cycle = I(f)Q_drift`.
+
+```
+python scripts/run_cell_class_learning.py \
+  --grid fast \
+  --kmax 4 \
+  --steps 1600 \
+  --restarts 2 \
+  --device auto \
+  --dtype float32 \
+  --sigma-in 0.3 \
+  --P0 50 \
+  --outdir outputs/cell_classes
+```
+
+```
+python scripts/make_cell_class_story_figures.py \
+  --indir outputs/cell_classes \
+  --outdir outputs/cell_classes_story \
+  --K 2
+```
+
+```
+python scripts/run_cell_class_noise_sweep.py \
+  --grid fast \
+  --sigma-in-values 0.1,0.3,0.6,1.0 \
+  --kmax 3 \
+  --steps 1200 \
+  --restarts 2 \
+  --device auto \
+  --dtype float32 \
+  --outdir outputs/cell_classes_noise_sweep
+```
+
+For a slower optimizer comparison, add `--optimizer reference`.

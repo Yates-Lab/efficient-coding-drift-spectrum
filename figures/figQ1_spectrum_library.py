@@ -6,7 +6,7 @@ the full spectrum library:
   - drift only (Kuang)
   - saccade only (Mostofi)
   - drift + saccade unified stationary (this work)
-  - Boi cycle: late (= drift) and early (saccade transient)
+  - Rucci/Boi cycle: late (= drift) and early (saccade transient)
 
 For a fair visual comparison we keep image, noise, and budget fixed and
 sweep the movement model. Three rows: spatial input spectrum |C(f, ω)|
@@ -21,37 +21,19 @@ sys.path.insert(0, ".")
 import numpy as np
 import matplotlib.pyplot as plt
 
-from src.spectra import (
-    DriftSpectrum, SaccadeSpectrum, DriftPlusSaccadeSpectrum,
-    BoiEarlyCleanApprox, BoiLateDriftApprox,
-)
 from src.pipeline import run, extract_kernels
 from src.plotting import setup_style
-from src.params import F_MAX, OMEGA_MIN, OMEGA_MAX
+from src.params import F_MAX
+from src.power_spectrum_library import (
+    spectrum_comparison_specs,
+)
 
 setup_style()
 
 
 def fig_q1():
     sigma_in, sigma_out, P0 = 0.3, 1.0, 50.0
-
-    spectra_to_compare = [
-        ("drift",
-         DriftSpectrum(D=2.0),
-         "tab:blue"),
-        ("saccade",
-         SaccadeSpectrum(A=2.5, lam=3.0),
-         "tab:orange"),
-        ("drift + saccade",
-         DriftPlusSaccadeSpectrum(D=2.0, A=2.5, lam=3.0),
-         "tab:green"),
-        ("late = drift",
-         BoiLateDriftApprox(D=0.05),
-         "tab:purple"),
-        ("early (saccade transient)",
-         BoiEarlyCleanApprox(),
-         "tab:red"),
-    ]
+    spectra_to_compare = spectrum_comparison_specs(include_controls=True)
 
     results = []
     for label, spec, color in spectra_to_compare:

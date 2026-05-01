@@ -148,7 +148,7 @@ def test_drift_plus_saccade_lorentzian_normalization():
     omega = np.linspace(-10000, 10000, 200001)
     s = DriftPlusSaccadeSpectrum(D=2.0, A=2.5, lam=3.0)
     Q = s.redistribution(f, omega)
-    integral = np.trapezoid(Q, omega, axis=1) / (2 * np.pi)
+    integral = np.trapz(Q, omega, axis=1) / (2 * np.pi)
     np.testing.assert_allclose(integral, 1.0, rtol=2e-3)
 
 
@@ -161,7 +161,7 @@ def test_drift_plus_saccade_power_preserving():
         omega_max = 500.0 * a
         omega = np.linspace(-omega_max, omega_max, 200001)
         C = s_full.C(np.array([f]), omega)[0]
-        integral = np.trapezoid(C, omega) / (2.0 * np.pi)
+        integral = np.trapz(C, omega) / (2.0 * np.pi)
         CI = image_spectrum(np.array([f]))[0]
         np.testing.assert_allclose(integral, CI, rtol=5e-3)
 

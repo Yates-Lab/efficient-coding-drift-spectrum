@@ -24,8 +24,8 @@ setup_style()
 
 
 def fig4():
-    sigma_out = 1.0
-    P0 = 50.0
+    sigma_out = 2.0
+    P0 = 20.0
     beta = 2.0
 
     D_grid = np.geomspace(0.01, 200.0, 40)
@@ -51,7 +51,10 @@ def fig4():
 
     for i, (sin, color) in enumerate(zip(sigma_in_levels, palette)):
         I_curve = I_table[i]
-        for ax in (ax_lin, ax_log):
+        for jj, ax in enumerate((ax_log, ax_lin)):
+            if jj == 1:
+                I_curve = I_curve / max(I_curve)
+
             ax.plot(D_grid, I_curve, color=color, lw=1.5,
                     label=rf"$\sigma_\mathrm{{in}}={sin:.2g}$" if ax is ax_lin else None)
             i_peak = int(np.argmax(I_curve))

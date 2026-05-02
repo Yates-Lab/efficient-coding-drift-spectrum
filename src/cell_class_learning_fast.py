@@ -87,6 +87,98 @@ def _as_torch_dtype(dtype: str):
     raise ValueError("dtype must be float32 or float64")
 
 
+def _validate_alpha_args(mode: str, K: int, alpha_floor: float, gain_delta_max: Optional[float]) -> str:
+    mode = str(mode).lower()
+    if mode not in {"softmax", "floor", "bounded_log_gain"}:
+        raise ValueError("alpha_mode must be 'softmax', 'floor', or 'bounded_log_gain'")
+    if not (0.0 <= float(alpha_floor) < 1.0 / K):
+        raise ValueError("alpha_floor must satisfy 0 <= alpha_floor < 1/K")
+    if mode == "bounded_log_gain":
+        if gain_delta_max is None or float(gain_delta_max) < 0:
+            raise ValueError("gain_delta_max must be nonnegative for bounded_log_gain")
+    return mode
+
+
+def _apply_alpha_floor(alpha, alpha_floor: float):
+    if alpha_floor <= 0:
+        return alpha
+    K = alpha.shape[1]
+    return alpha_floor + (1.0 - K * alpha_floor) * alpha
+
+
+def _alpha_and_baseline(
+    Z,
+    *,
+    mode: str = "softmax",
+    alpha_floor: float = 0.0,
+    gain_delta_max: Optional[float] = 0.5,
+    baseline_logits=None,
+    eps: float = 1e-8,
+):
+    """Return condition mixtures and the baseline mixture used to form them."""
+    import torch
+
+    K = Z.shape[1]
+    mode = _validate_alpha_args(mode, K, alpha_floor, gain_delta_max)
+    if baseline_logits is None:
+        b = torch.full((K,), 1.0 / K, device=Z.device, dtype=Z.dtype)
+    else:
+        b = torch.softmax(baseline_logits, dim=0)
+
+    if mode == "softmax":
+        alpha = torch.softmax(Z, dim=1)
+    elif mode == "floor":
+        alpha = torch.softmax(Z, dim=1)
+    else:
+        m = float(gain_delta_max) * torch.tanh(Z)
+        alpha = b[None, :] * torch.exp(m)
+        alpha = alpha / (torch.sum(alpha, dim=1, keepdim=True) + eps)
+
+    alpha = _apply_alpha_floor(alpha, float(alpha_floor))
+    alpha = alpha / (torch.sum(alpha, dim=1, keepdim=True) + eps)
+    return alpha, b
+
+
+def make_alpha(
+    Z,
+    *,
+    mode: str = "softmax",
+    alpha_floor: float = 0.0,
+    gain_delta_max: Optional[float] = 0.5,
+    baseline_logits=None,
+    learn_baseline: bool = False,
+    eps: float = 1e-8,
+):
+    """Build condition-specific class mixtures.
+
+    ``learn_baseline`` is accepted for API symmetry; callers that learn the
+    baseline should pass the learned ``baseline_logits`` tensor.
+    """
+    del learn_baseline
+    alpha, _ = _alpha_and_baseline(
+        Z,
+        mode=mode,
+        alpha_floor=alpha_floor,
+        gain_delta_max=gain_delta_max,
+        baseline_logits=baseline_logits,
+        eps=eps,
+    )
+    return alpha
+
+
+def _budget_share_torch(alpha, H_active, C, W, s_in2: float, eps: float):
+    import torch
+
+    class_raw_spend = (
+        alpha[:, :, None]
+        * H_active[None, :, :]
+        * (C[:, None, :] + s_in2)
+        * W[None, None, :]
+    )
+    class_raw_spend = torch.sum(class_raw_spend, dim=2)
+    return class_raw_spend / (torch.sum(class_raw_spend, dim=1, keepdim=True) + eps)
+
+
 def _softplus_inverse_np(x: Array) -> Array:
     """Numerically stable inverse softplus for positive x."""
     x = np.asarray(x, dtype=np.float64)
@@ -193,6 +285,14 @@ def fit_cell_classes_fast(
     min_delta: float = 1e-7,
     jitter: float = 0.05,
     torch_threads: Optional[int] = None,
+    alpha_mode: str = "softmax",
+    alpha_floor: float = 0.0,
+    gain_delta_max: Optional[float] = 0.5,
+    learn_baseline_mix: bool = False,
+    baseline_mix_weight: float = 0.0,
+    kl_to_baseline_weight: float = 0.0,
+    share_floor: float = 0.0,
+    share_floor_weight: float = 0.0,
     verbose: bool = False,
 ) -> ClassFit:
     """Fast version of ``fit_cell_classes``.
@@ -205,8 +305,11 @@ def fit_cell_classes_fast(
 
     if K < 1:
         raise ValueError("K must be >= 1")
+    alpha_mode = _validate_alpha_args(alpha_mode, K, alpha_floor, gain_delta_max)
     if P0 <= 0:
         raise ValueError("P0 must be positive")
+    if share_floor < 0 or share_floor >= 1.0 / K:
+        raise ValueError("share_floor must satisfy 0 <= share_floor < 1/K")
     if torch_threads is not None and torch_threads > 0:
         torch.set_num_threads(int(torch_threads))
 
@@ -284,7 +387,14 @@ def fit_cell_classes_fast(
         else:
             Z = torch.nn.Parameter(0.01 * torch.randn(Q, K, device=torch_device, dtype=torch_dtype))
 
-        opt = torch.optim.Adam([U, Z], lr=lr)
+        opt_params = [U, Z]
+        if learn_baseline_mix:
+            B = torch.nn.Parameter(torch.zeros(K, device=torch_device, dtype=torch_dtype))
+            opt_params.append(B)
+        else:
+            B = None
+
+        opt = torch.optim.Adam(opt_params, lr=lr)
         history: Dict[str, List[float]] = {"J": [], "loss": []}
         best_state = None
         best_J = -np.inf
@@ -297,7 +407,14 @@ def fit_cell_classes_fast(
 
             H = Fnn.softplus(U) + eps
             H = H / (torch.sum(H * W[None, :], dim=1, keepdim=True) + eps)
-            alpha = torch.softmax(Z, dim=1)
+            alpha, baseline_mix = _alpha_and_baseline(
+                Z,
+                mode=alpha_mode,
+                alpha_floor=alpha_floor,
+                gain_delta_max=gain_delta_max,
+                baseline_logits=B,
+                eps=eps,
+            )
             G_raw = alpha @ H
             spend = torch.sum(G_raw * (C + s_in2) * W[None, :], dim=1) + eps
             scale = P0 / spend
@@ -314,6 +431,15 @@ def fit_cell_classes_fast(
                 loss = loss + smooth_weight * smooth_penalty(H)
             if entropy_weight > 0:
                 loss = loss + entropy_weight * entropy_penalty(alpha)
+            if baseline_mix_weight > 0 and B is not None:
+                loss = loss + baseline_mix_weight * (-torch.sum(torch.log(baseline_mix + eps)))
+            if kl_to_baseline_weight > 0:
+                kl = torch.sum(alpha * (torch.log(alpha + eps) - torch.log(baseline_mix[None, :] + eps)), dim=1)
+                loss = loss + kl_to_baseline_weight * torch.sum(pi * kl)
+            if share_floor_weight > 0 and share_floor > 0:
+                budget_share = _budget_share_torch(alpha, H, C, W, s_in2, eps)
+                share_penalty = torch.sum(pi[:, None] * torch.relu(float(share_floor) - budget_share) ** 2)
+                loss = loss + share_floor_weight * share_penalty
 
             loss.backward()
             opt.step()
@@ -331,10 +457,17 @@ def fit_cell_classes_fast(
                 if J_float > best_J + min_delta:
                     best_J = J_float
                     no_improve = 0
-                    best_state = (
-                        U.detach().clone(),
-                        Z.detach().clone(),
-                    )
+                    if B is None:
+                        best_state = (
+                            U.detach().clone(),
+                            Z.detach().clone(),
+                        )
+                    else:
+                        best_state = (
+                            U.detach().clone(),
+                            Z.detach().clone(),
+                            B.detach().clone(),
+                        )
                 else:
                     no_improve += 1
                 if patience > 0 and no_improve >= patience:
@@ -346,11 +479,20 @@ def fit_cell_classes_fast(
             with torch.no_grad():
                 U.copy_(best_state[0])
                 Z.copy_(best_state[1])
+                if B is not None and len(best_state) > 2:
+                    B.copy_(best_state[2])
 
         with torch.no_grad():
             H_active = Fnn.softplus(U) + eps
             H_active = H_active / (torch.sum(H_active * W[None, :], dim=1, keepdim=True) + eps)
-            alpha = torch.softmax(Z, dim=1)
+            alpha, baseline_mix = _alpha_and_baseline(
+                Z,
+                mode=alpha_mode,
+                alpha_floor=alpha_floor,
+                gain_delta_max=gain_delta_max,
+                baseline_logits=B,
+                eps=eps,
+            )
             G_raw = alpha @ H_active
             spend = torch.sum(G_raw * (C + s_in2) * W[None, :], dim=1) + eps
             scale = P0 / spend
@@ -359,6 +501,7 @@ def fit_cell_classes_fast(
             signal = G_active * C
             I_q = torch.sum(torch.log1p(signal / den) * W[None, :], dim=1)
             J = torch.sum(pi * I_q)
+            budget_share = _budget_share_torch(alpha, H_active, C, W, s_in2, eps)
 
             H_full = np.zeros((K, F_total), dtype=np.float64)
             G_full = np.zeros((Q, F_total), dtype=np.float64)
@@ -384,6 +527,11 @@ def fit_cell_classes_fast(
                 steps_run=steps_run,
                 restart=restart,
             )
+            fit.budget_share = budget_share.detach().cpu().numpy().astype(np.float64)
+            fit.baseline_mix = baseline_mix.detach().cpu().numpy().astype(np.float64)
+            fit.alpha_mode = alpha_mode
+            fit.gain_delta_max = None if gain_delta_max is None else float(gain_delta_max)
+            fit.alpha_floor = float(alpha_floor)
 
         if fit.J > best_J_global:
             best_J_global = fit.J
@@ -391,6 +539,191 @@ def fit_cell_classes_fast(
 
     assert best_fit is not None
     return best_fit
+
+
+def refit_alpha_for_fixed_H_fast(
+    C_stack: Array,
+    weights: Array,
+    H_fixed: Array,
+    *,
+    sigma_in: float,
+    sigma_out: float,
+    P0: float,
+    condition_weights: Optional[Array] = None,
+    alpha_mode: str = "bounded_log_gain",
+    alpha_floor: float = 0.0,
+    gain_delta_max: Optional[float] = 0.5,
+    learn_baseline_mix: bool = False,
+    baseline_mix_weight: float = 0.0,
+    kl_to_baseline_weight: float = 0.0,
+    share_floor: float = 0.0,
+    share_floor_weight: float = 0.0,
+    n_steps: int = 400,
+    lr: float = 5e-2,
+    device: str = "auto",
+    dtype: str = "float32",
+    seed: int = 0,
+    patience: int = 20,
+    check_every: int = 25,
+    min_delta: float = 1e-7,
+    torch_threads: Optional[int] = None,
+    verbose: bool = False,
+) -> ClassFit:
+    """Optimize only condition-dependent gains for fixed class spectra."""
+    import torch
+
+    if P0 <= 0:
+        raise ValueError("P0 must be positive")
+    if torch_threads is not None and torch_threads > 0:
+        torch.set_num_threads(int(torch_threads))
+
+    C_np, W_np, freq_shape, support_np = _flatten_and_mask(C_stack, weights)
+    Q, F_active = C_np.shape
+    F_total = int(np.prod(freq_shape))
+    H_fixed = np.asarray(H_fixed, dtype=np.float64)
+    if H_fixed.ndim < 2 or H_fixed.shape[1:] != freq_shape:
+        raise ValueError(f"H_fixed must have shape (K, {freq_shape}), got {H_fixed.shape}")
+    K = H_fixed.shape[0]
+    alpha_mode = _validate_alpha_args(alpha_mode, K, alpha_floor, gain_delta_max)
+    if share_floor < 0 or share_floor >= 1.0 / K:
+        raise ValueError("share_floor must satisfy 0 <= share_floor < 1/K")
+
+    pi_np = normalize_condition_weights(condition_weights, Q)
+    torch_device = _as_torch_device(device)
+    torch_dtype = _as_torch_dtype(dtype)
+    C = torch.as_tensor(C_np, device=torch_device, dtype=torch_dtype)
+    W = torch.as_tensor(W_np, device=torch_device, dtype=torch_dtype)
+    pi = torch.as_tensor(pi_np, device=torch_device, dtype=torch_dtype)
+    H_active = torch.as_tensor(
+        H_fixed.reshape(K, F_total)[:, support_np],
+        device=torch_device,
+        dtype=torch_dtype,
+    )
+
+    s_in2 = float(sigma_in) ** 2
+    s_out2 = float(sigma_out) ** 2
+    eps = 1e-8 if torch_dtype == torch.float32 else 1e-12
+
+    torch.manual_seed(seed)
+    Z = torch.nn.Parameter(0.01 * torch.randn(Q, K, device=torch_device, dtype=torch_dtype))
+    opt_params = [Z]
+    if learn_baseline_mix:
+        B = torch.nn.Parameter(torch.zeros(K, device=torch_device, dtype=torch_dtype))
+        opt_params.append(B)
+    else:
+        B = None
+    opt = torch.optim.Adam(opt_params, lr=lr)
+
+    history: Dict[str, List[float]] = {"J": [], "loss": []}
+    best_state = None
+    best_J = -np.inf
+    no_improve = 0
+    steps_run = 0
+
+    for step in range(n_steps):
+        steps_run = step + 1
+        opt.zero_grad(set_to_none=True)
+        alpha, baseline_mix = _alpha_and_baseline(
+            Z,
+            mode=alpha_mode,
+            alpha_floor=alpha_floor,
+            gain_delta_max=gain_delta_max,
+            baseline_logits=B,
+            eps=eps,
+        )
+        G_raw = alpha @ H_active
+        spend = torch.sum(G_raw * (C + s_in2) * W[None, :], dim=1) + eps
+        scale = P0 / spend
+        G = G_raw * scale[:, None]
+        den = G * s_in2 + s_out2
+        signal = G * C
+        I_q = torch.sum(torch.log1p(signal / den) * W[None, :], dim=1)
+        J = torch.sum(pi * I_q)
+        loss = -J
+        if baseline_mix_weight > 0 and B is not None:
+            loss = loss + baseline_mix_weight * (-torch.sum(torch.log(baseline_mix + eps)))
+        if kl_to_baseline_weight > 0:
+            kl = torch.sum(alpha * (torch.log(alpha + eps) - torch.log(baseline_mix[None, :] + eps)), dim=1)
+            loss = loss + kl_to_baseline_weight * torch.sum(pi * kl)
+        if share_floor_weight > 0 and share_floor > 0:
+            budget_share = _budget_share_torch(alpha, H_active, C, W, s_in2, eps)
+            share_penalty = torch.sum(pi[:, None] * torch.relu(float(share_floor) - budget_share) ** 2)
+            loss = loss + share_floor_weight * share_penalty
+
+        loss.backward()
+        opt.step()
+
+        if step % check_every == 0 or step == n_steps - 1:
+            J_float = float(J.detach().cpu())
+            loss_float = float(loss.detach().cpu())
+            history["J"].append(J_float)
+            history["loss"].append(loss_float)
+            if verbose:
+                print(f"fixed-H step={step} J={J_float:.6g} loss={loss_float:.6g}")
+            if J_float > best_J + min_delta:
+                best_J = J_float
+                no_improve = 0
+                if B is None:
+                    best_state = (Z.detach().clone(),)
+                else:
+                    best_state = (Z.detach().clone(), B.detach().clone())
+            else:
+                no_improve += 1
+            if patience > 0 and no_improve >= patience:
+                break
+
+    if best_state is not None:
+        with torch.no_grad():
+            Z.copy_(best_state[0])
+            if B is not None and len(best_state) > 1:
+                B.copy_(best_state[1])
+
+    with torch.no_grad():
+        alpha, baseline_mix = _alpha_and_baseline(
+            Z,
+            mode=alpha_mode,
+            alpha_floor=alpha_floor,
+            gain_delta_max=gain_delta_max,
+            baseline_logits=B,
+            eps=eps,
+        )
+        G_raw = alpha @ H_active
+        spend = torch.sum(G_raw * (C + s_in2) * W[None, :], dim=1) + eps
+        scale = P0 / spend
+        G_active = G_raw * scale[:, None]
+        den = G_active * s_in2 + s_out2
+        signal = G_active * C
+        I_q = torch.sum(torch.log1p(signal / den) * W[None, :], dim=1)
+        J = torch.sum(pi * I_q)
+        budget_share = _budget_share_torch(alpha, H_active, C, W, s_in2, eps)
+
+        G_full = np.zeros((Q, F_total), dtype=np.float64)
+        G_full[:, support_np] = G_active.detach().cpu().numpy().astype(np.float64)
+
+        fit = ClassFit(
+            K=K,
+            J=float(J.detach().cpu()),
+            I_q=I_q.detach().cpu().numpy().astype(np.float64),
+            H=H_fixed.copy(),
+            alpha=alpha.detach().cpu().numpy().astype(np.float64),
+            scale=scale.detach().cpu().numpy().astype(np.float64),
+            G=G_full.reshape((Q,) + freq_shape),
+            history=history,
+        )
+        fit.fast_diagnostics = FastFitDiagnostics(
+            device=str(torch_device),
+            dtype=str(torch_dtype).replace("torch.", ""),
+            n_active_freqs=F_active,
+            n_total_freqs=F_total,
+            steps_run=steps_run,
+            restart=0,
+        )
+        fit.budget_share = budget_share.detach().cpu().numpy().astype(np.float64)
+        fit.baseline_mix = baseline_mix.detach().cpu().numpy().astype(np.float64)
+        fit.alpha_mode = alpha_mode
+        fit.gain_delta_max = None if gain_delta_max is None else float(gain_delta_max)
+        fit.alpha_floor = float(alpha_floor)
+        return fit
 
 
 def sweep_cell_classes_fast(
@@ -407,6 +740,14 @@ def sweep_cell_classes_fast(
     patience: int = 20,
     check_every: int = 25,
     torch_threads: Optional[int] = None,
+    alpha_mode: str = "softmax",
+    alpha_floor: float = 0.0,
+    gain_delta_max: Optional[float] = 0.5,
+    learn_baseline_mix: bool = False,
+    baseline_mix_weight: float = 0.0,
+    kl_to_baseline_weight: float = 0.0,
+    share_floor: float = 0.0,
+    share_floor_weight: float = 0.0,
     seed: int = 0,
     verbose: bool = False,
 ) -> SweepResult:
@@ -433,6 +774,14 @@ def sweep_cell_classes_fast(
             patience=patience,
             check_every=check_every,
             torch_threads=torch_threads,
+            alpha_mode=alpha_mode,
+            alpha_floor=alpha_floor,
+            gain_delta_max=gain_delta_max,
+            learn_baseline_mix=learn_baseline_mix,
+            baseline_mix_weight=baseline_mix_weight,
+            kl_to_baseline_weight=kl_to_baseline_weight,
+            share_floor=share_floor,
+            share_floor_weight=share_floor_weight,
             seed=seed + 100 * K,
             verbose=verbose,
         )

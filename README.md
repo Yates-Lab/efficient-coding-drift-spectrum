@@ -345,3 +345,23 @@ python scripts/run_cell_class_learning.py \
   --torch-threads 1 \
   --outdir outputs/cell_classes_movement_sweep_smoke
 ```
+
+
+```
+python scripts/run_information_power_curve.py \
+  --condition-set movement_sweep \
+  --grid fast \
+  --k-values 1,2,3 \
+  --fit-mode full-refit \
+  --alpha-mode bounded_log_gain \
+  --gain-delta-max 0.5 \
+  --P-ref 50 \
+  --steps-H 1500 \
+  --steps-alpha 400 \
+  --restarts 2 \
+  --device auto \
+  --dtype float32 \
+  --torch-threads 1 \
+  --outdir outputs/information_power_curve
+
+```

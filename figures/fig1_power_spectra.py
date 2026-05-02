@@ -36,8 +36,8 @@ from src.plotting import setup_style
 setup_style()
 
 
-F_MIN, F_MAX = 0.1, 4.0
-OMEGA_MIN, OMEGA_MAX = 0.5, 400.0
+F_MIN, F_MAX = 0.1, 6.0
+OMEGA_MIN, OMEGA_MAX = 0.25, 400.0
 CMAP = "magma"
 N_LEVELS = 24
 FLOOR = 1e-6  # vmin = FLOOR * shared_vmax

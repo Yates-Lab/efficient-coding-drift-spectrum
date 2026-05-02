@@ -27,10 +27,10 @@ setup_style()
 
 
 def fig2():
-    sigma_out = 1.0
+    sigma_out = 2.0
     P0 = 50.0
 
-    sigma_in_fixed = 1.0
+    sigma_in_fixed = 0.2
     D_sweep = np.geomspace(0.05, 50.0, 6)
 
     D_fixed = 5.0

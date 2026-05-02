@@ -128,10 +128,10 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--outdir", type=str, default="outputs/cell_classes")
     parser.add_argument("--grid", type=str, default="fast", choices=("fast", "hi_res"))
-    parser.add_argument("--sigma-in", type=float, default=0.3)
-    parser.add_argument("--sigma-out", type=float, default=1.0)
+    parser.add_argument("--sigma-in", type=float, default=0.2)
+    parser.add_argument("--sigma-out", type=float, default=2.0)
     parser.add_argument("--P0", type=float, default=50.0)
-    parser.add_argument("--kmax", type=int, default=4)
+    parser.add_argument("--kmax", type=int, default=6)
     parser.add_argument("--condition-set", type=str, default="cycle_pair",
                         choices=("cycle_pair", "movement_sweep"),
                         help="cycle_pair is the canonical early/late pair; movement_sweep is 5 saccades + 5 drifts")
@@ -162,6 +162,23 @@ def main():
                         help="fast optimizer early-stopping check interval")
     parser.add_argument("--torch-threads", type=int, default=1,
                         help="set PyTorch CPU thread count for the fast optimizer; 1 is usually fastest/stablest on laptops; 0 leaves default")
+    parser.add_argument("--alpha-mode", type=str, default="softmax",
+                        choices=("softmax", "floor", "bounded_log_gain"),
+                        help="class gain parameterization for the fast optimizer")
+    parser.add_argument("--alpha-floor", type=float, default=0.0,
+                        help="minimum alpha per class for floor/bounded modes")
+    parser.add_argument("--gain-delta-max", type=float, default=0.5,
+                        help="bounded log-gain amplitude Delta")
+    parser.add_argument("--learn-baseline-mix", action="store_true",
+                        help="learn the global baseline class mixture for bounded log-gain")
+    parser.add_argument("--baseline-mix-weight", type=float, default=0.0,
+                        help="anti-collapse penalty weight for learned baseline mixture")
+    parser.add_argument("--kl-to-baseline-weight", type=float, default=0.0,
+                        help="KL penalty weight pulling alpha toward the baseline mixture")
+    parser.add_argument("--share-floor", type=float, default=0.0,
+                        help="minimum response-budget share per class and condition")
+    parser.add_argument("--share-floor-weight", type=float, default=0.0,
+                        help="penalty weight for violating --share-floor")
     args = parser.parse_args()
 
     if args.optimizer == "fast":
@@ -247,6 +264,14 @@ def main():
             patience=args.patience,
             check_every=args.check_every,
             torch_threads=args.torch_threads if args.torch_threads > 0 else None,
+            alpha_mode=args.alpha_mode,
+            alpha_floor=args.alpha_floor,
+            gain_delta_max=args.gain_delta_max,
+            learn_baseline_mix=args.learn_baseline_mix,
+            baseline_mix_weight=args.baseline_mix_weight,
+            kl_to_baseline_weight=args.kl_to_baseline_weight,
+            share_floor=args.share_floor,
+            share_floor_weight=args.share_floor_weight,
         )
     else:
         sweep = sweep_cell_classes(
@@ -307,6 +332,10 @@ def main():
         payload[f"I_q_K{K}"] = fit.I_q
         payload[f"regret_q_K{K}"] = per_condition_regret(oracle.I_star_q, fit.I_q)
         payload[f"budget_share_K{K}"] = rho
+        if hasattr(fit, "budget_share"):
+            payload[f"optimizer_budget_share_K{K}"] = fit.budget_share
+        if hasattr(fit, "baseline_mix"):
+            payload[f"baseline_mix_K{K}"] = fit.baseline_mix
         payload[f"budget_spend_K{K}"] = spend
         payload[f"effective_gain_K{K}"] = effective_class_gains(fit)
         summary_payload["fits"][str(K)] = {

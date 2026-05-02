@@ -1,273 +1,225 @@
 # Efficient coding for moving sensors
 
-Reproducible Python implementation of the analytic results in the
-moving-sensor efficient-coding appendix (Jun 2026 draft) with
-publication-quality figures and a validating test suite.
+This repository contains a reproducible Python implementation of moving-sensor
+efficient-coding analyses. It builds retinal input spectra from image statistics
+and eye-movement models, solves the constrained optimal-filter problem, and
+generates the figure and diagnostic artifacts in `outputs/`.
 
-## What this code computes
+The main code path is:
 
-Given a power-law image spectrum
+1. Define an input spectrum `C_theta(f, omega)` with a `Spectrum.C(f, omega)`
+   object from `src/spectra.py` or `src/rucci_cycle_spectra.py`.
+2. Solve the Linsker/Jun efficient-coding problem with `src/solver.py`, usually
+   through the shared pipeline in `src/pipeline.py`.
+3. Optionally reconstruct spatial and temporal kernels with `src/kernels.py`.
+4. Plot figures, run audits, or fit reusable cell-class filters with the
+   scripts in `figures/` and `scripts/`.
 
-    C_I(f) = A / (f^2 + k0^2)^(β/2),
+## What It Computes
 
-a movement model (Brownian drift, Mostofi analytic saccade transients,
-Dong-Atick Gaussian linear motion, Dong-Atick separable controls, or the
-early/late fixation-cycle selector), and a
-fixed band B = { (f, ω) : 0 ≤ f ≤ f_max,
-ω_min ≤ |ω| ≤ ω_max }, this codebase
+For a natural-image spectrum
 
-1. constructs the spatiotemporal input spectrum C_θ(f, ω) (`src/spectra.py`);
-2. solves the constrained efficient-coding problem (Linsker / Jun)
-
-       maximise  ∫_B (1/2) log( 1 + |v|^2 C_θ / σ_out^2 )  dω df
-       s.t.      ∫_B |v|^2 (C_θ + σ_in^2)  ≤  P0,
-                 |v|^2 ≥ 0
-
-   in closed form via dual bisection on λ (`src/solver.py`);
-3. reconstructs causal minimum-phase temporal kernels and 2D spatial
-   kernels from the magnitude solution (`src/kernels.py`).
-
-The main fixation-cycle path is analytic (`src/rucci_cycle_spectra.py`).
-It selects between the Mostofi cumulative-Gaussian saccade approximation and
-the Kuang/Brownian drift derivation, returning the two inputs needed by the solver:
-early fixation `C_early = I(f) Q_saccade` and late fixation
-`C_late = I(f) Q_drift`.
-
-`make_figure7_rucci_cycle_spectra()` is the canonical analytic cycle
-source for the paper figures. Figure-facing spectrum panels are centralized in
-`src/power_spectrum_library.py`, so Figure 1b and 1c use the same positive-Hz
-Figure 7 arrays. Figure 6, Q1, and Q3 get their solver inputs from
-`cycle_solver_spectra()` / `spectrum_comparison_specs()` in that same module,
-so filter reconstructions and spectrum panels stay tied to the same cached
-Figure 7 cycle object.
-
-The optimization is done on the direct (unaliased) spectrum, following
-the appendix's working assumption that the m=0 copy dominates. See the
-*aliasing* note below for caveats.
-
-## Layout
-
+```text
+C_I(f) = A / (f^2 + k0^2)^(beta/2)
 ```
+
+and a movement-generated temporal redistribution, the code solves
+
+```text
+maximize    integral_B 0.5 log(1 + |v|^2 C_theta / sigma_out^2) dmu
+subject to  integral_B |v|^2 (C_theta + sigma_in^2) dmu <= P0
+            |v|^2 >= 0
+```
+
+The solver uses the closed-form KKT solution with bisection on the dual
+variable lambda. The integration band is controlled by `src/params.py`:
+
+```text
+F_MAX = 6.0 cyc/unit
+OMEGA_MIN = 0.5 rad/s
+OMEGA_MAX = 400.0 rad/s
+```
+
+The solver grids currently sample spatial frequencies from `0.05` to `5.0`
+cyc/unit. The `hi_res` grid uses `220 x 2048` samples; the `fast` grid uses
+`120 x 1024` samples.
+
+## Repository Layout
+
+```text
 src/
-    spectra.py     drift, Mostofi saccade, Dong-Atick linear and separable
-                   spectra, analytic controls
-    rucci_cycle_spectra.py
-                   analytic early and late cycle selector spectra
-    power_spectrum_library.py
-                   shared Figure 1b/1c panels and solver spectra from the
-                   canonical Figure 7 cycle source
-    solver.py      KKT solver, mutual information, water-filling reduction
-    kernels.py     cepstral min-phase temporal filter, 2D spatial kernel,
-                   soft-band Tukey taper
-    plotting.py    publication style, log-contour helper, palettes
-    params.py      shared band and grid parameters
-tests/
-    test_spectra.py    21 tests (12 drift/linear/combined + 9 saccade)
-    test_solver.py     10 tests
-    test_kernels.py     8 tests
-figures/
-    fig1_power_spectra.py        movement-induced C_θ(f, ω)
-    fig2_optimal_filter.py       |v*(f, ω)|^2 across D and σ_in sweeps
-    fig3_kernels.py              spatial v_s(r) and temporal v_t(t)
-                                 kernels under drift
-    fig4_information_vs_D.py     I*(D) inverted-U for varying σ_in
-    fig5_kernel_slices.py        kernels at fixed ω₀ and f₀ slices
-    fig6_saccade_kernels.py      spatial and temporal kernels under the
-                                 analytic early and late cycle spectra
-    fig6b_saccade_diagnostics.py  diagnostic: 2D Q kernel, spatial /
-                                 temporal profiles, and saccade-vs-drift
-                                 spectrum comparison
-    fig7_rucci_cycle_spectra.py   analytic Q and C for early saccade and
-                                 late drift cycle regimes
-    fig8_mostofi_saccade_approximation.py
-                                 Mostofi Figure 4 reproduction
-    figQ1_spectrum_library.py     supplemental spectrum/solver library
-    figQ2_information_sweeps.py   supplemental information sweeps
-    figQ3_magno_parvo.py          analytic cycle kernels and summary
-scripts/
-    check_aliasing_negligible.py validation that the m=0 copy assumption
-                                 is acceptable for the band/parameters used
-outputs/   PNG artifacts at 320 dpi
+  spectra.py                  Spectrum API plus static image, Brownian drift,
+                              Mostofi saccade, Dong-Atick linear motion, and
+                              separable stationary controls
+  rucci_cycle_spectra.py      Canonical analytic early/late fixation-cycle
+                              spectra used by the cycle figures and cell fits
+  power_spectrum_library.py   Named SpectrumSpec collections shared by figures,
+                              scripts, and cell-class condition builders
+  solver.py                   Closed-form optimal-filter solver and information
+                              objective
+  pipeline.py                 Spectrum -> Result orchestration, grid selection,
+                              kernel extraction, and slice helpers
+  kernels.py                  Minimum-phase temporal reconstruction and radial
+                              spatial-kernel reconstruction
+  cell_class_learning.py      Reference information-aware reusable class-filter
+                              model
+  cell_class_learning_fast.py Faster Torch implementation used by production
+                              cell-class scripts
+  cell_class_figures.py       Plotting and diagnostics for learned cell classes
+  spectrum_diagnostics.py     Separability and temporal-centroid diagnostics
+  plotting.py                 Matplotlib style, radial weights, band masks, and
+                              contour helpers
+  params.py                   Shared band and grid parameters
+
+figures/                      Figure-generating entry points
+scripts/                      Audits, cell-class runs, and story figures
+tests/                        Focused pytest suite
+outputs/                      Generated PNG/PDF/NPZ/JSON artifacts
+run_all.py                    Tests plus the standard figure pipeline
+HANDOFF.md                    Historical notes; useful context, not source code
 ```
 
-## Running
+## Setup
+
+Use Python 3.9+ from the repository root. There is no package metadata file, so
+install the scientific stack directly:
 
 ```bash
-pip install numpy scipy matplotlib pytest
+python -m pip install numpy scipy matplotlib pytest
+```
 
-python run_all.py                                 # tests + all figure scripts
+Cell-class learning and the related tests/scripts also need Torch:
+
+```bash
+python -m pip install torch
+```
+
+The scripts assume they are run from the repository root because they add `.`
+to `sys.path`.
+
+## Quick Start
+
+Run the test suite:
+
+```bash
+python -m pytest tests/ -v
+```
+
+Generate the standard figure set:
+
+```bash
+python run_all.py --skip-tests
+```
+
+Run tests and generate the standard figures:
+
+```bash
+python run_all.py
+```
+
+Run the full production path, including the fast cell-class fit and the
+cell-class story figures:
+
+```bash
 python run_all.py --with-cell-learning --with-cell-story
-                                                  # full production artifacts
-
-python scripts/check_aliasing_negligible.py       # sanity check
 ```
 
-## Adding a movement spectrum
+Useful `run_all.py` flags:
 
-New analyses should define spectra once and then reuse the shared pipeline.
-The intended path is:
-
-1. Add or reuse a `Spectrum` class in `src/spectra.py` with a `C(f, omega)` method.
-2. Add a readable factory in `src/power_spectrum_library.py` that returns
-   `SpectrumSpec` objects with keys, labels, parameters, and references.
-3. Register the factory in `SPECTRUM_SETS` if scripts should request it by name.
-4. Run it with `src.pipeline.run_many(...)` or convert the specs to cell-class
-   conditions with `conditions_from_spectrum_specs(...)`.
-
-Figure scripts should specify which spectrum set they need; they should not
-rebuild grids, masks, Lagrange multiplier solves, or kernel reconstruction.
-
-## What each figure shows
-
-**Figure 1.** Brownian drift Lorentzian, Mostofi saccade transients,
-Gaussian-linear-motion spectra, and the analytic early/late
-cycle decomposition. The white line marks characteristic crossovers
-where they are meaningful.
-
-**Figure 2.** Optimal filter |v*(f, ω)|^2 in two parameter sweeps. Top
-row varies D from 0.05 to 50 at σ_in = 0.3; the band of high-gain
-frequencies expands as drift pushes spatial power into temporal
-frequencies, and the inverted-U is visible from the I* values in the
-titles. Bottom row varies σ_in from 0.05 to 2 at D = 5; gain collapses
-as input noise grows.
-
-**Figure 3.** Spatial kernel v_s(r) (radial cross-section, symmetric
-around r = 0) and temporal kernel v_t(t) (causal min-phase IFT after a
-soft Tukey taper at the band edges). The temporal kernel peak time
-scales monotonically with 1/D — faster drift selects faster filters.
-The spatial kernel narrows with D and shows classic Mexican-hat
-center-surround structure.
-
-A note on the temporal kernels: cepstral minimum-phase reconstruction
-is unstable for spectra with hard zeros. The hard band edges produce
-log|v_t| spikes outside the band that contaminate the cepstrum. The
-soft Tukey taper in `src.kernels.soft_band_taper` keeps the
-reconstruction stable; it leaves the in-band filter untouched and
-smooths the edge transition.
-
-**Figure 4.** I*(D) curves for σ_in ∈ {0.03, 0.06, 0.11, 0.22, 0.42,
-0.81, 1.6, 3.0}, on linear and log y-axes. The inverted-U is preserved
-across all noise levels; D* shifts to higher values as σ_in grows.
-
-**Figure 5.** Slices of the optimal filter at fixed ω₀ ∈ {1, 2.3, 5.1,
-12, 26, 59, 130, 300} rad/s and at fixed f₀ ∈ {0.08, 0.13, 0.23, 0.38,
-0.63, 1.1, 1.8, 3.0} cyc/u, for σ_in ∈ {0.1, 0.5} at D = 5. High-ω₀
-slices broaden in space; high-f₀ slices peak earlier in time.
-
-**Figure 6.** Spatial and temporal kernels of the optimal filter under
-the canonical Figure 7 analytic cycle spectra. The early condition uses
-`C_early = I(f) Q_saccade`; the late condition uses
-`C_late_total = I(f) Q_drift_total`. The figure sweeps σ_in and compares
-the resulting early and late spatial/temporal kernels.
-
-**Figure 6b (diagnostic).** Sanity check on the saccade redistribution
-kernel Q_sac.
-- Top row: 2D log-contour of Q at A ∈ {0.5°, 2.5°, 7°} with the
-  predicted crossover f_c = 1/(2A) marked.
-- Middle row left: spatial profile Q(f, ω₀=8 Hz) for several A,
-  showing the f² rise and saturation.
-- Middle row right: temporal profile Q(f₀=0.5 cyc/u, ω), showing
-  the ~1/ω² falloff at high ω.
-- Bottom row: full spectra C_sac vs C_drift for comparison, plus a
-  spatial-power conservation check confirming that drift exactly
-  preserves C_I(f) and the saccade spectrum integrates proportionally
-  to C_I.
-The figure also prints numerical sanity checks: low-f log-log slope
-(predicted 2.0; measured 1.98), and 1/A scaling of the crossover
-(predicted ratio 4.0 between A=1° and A=4°; measured 4.01).
-
-**Figure 7.** The analytic cycle spectra used for the
-early-vs-late fixation question. It plots `Q_saccade`,
-`I(f) Q_saccade`, `Q_drift_total`, and `I(f) Q_drift_total`; it also
-saves `outputs/rucci_cycle_spectra_demo.npz`. This same source spectrum is
-used by the other cycle figures through `src.power_spectrum_library`.
-
-**Figure 8.** Synthetic reproduction of Mostofi et al. Figure 4 using the
-cumulative-Gaussian-smoothed saccade transient. This is the same saccade
-approximation used by `SaccadeSpectrum` and the early fixation selector.
-
-## Aliasing
-
-The appendix assumes the m=0 copy of the periodic-replication sum
-dominates the represented spectrum. The figures here are generated under
-that assumption. `scripts/check_aliasing_negligible.py` quantifies how
-well the assumption holds for the band/parameter ranges we use. The
-findings:
-
-- At high drift (D ≥ 5), aliased contributions are < 25% of the in-band
-  signal power for a critically-sampled mosaic, and < 6% at 1.5×
-  over-sampling. The dominant-copy approximation works.
-- At low drift (D ≤ 0.5), aliased contributions can be comparable to or
-  larger than the direct contribution under critical sampling. The
-  dominant-copy approximation breaks down here, because the spectrum
-  hasn't been spread across temporal frequencies yet — high-spatial-
-  frequency power still has substantial weight at ω inside the band.
-
-The honest version of this story would compute the aliased spectrum
-under a global square mosaic with a chosen k_s. Doing this properly
-requires choosing what the cell mosaic actually is (a single global k_s,
-or per-cell-type k_s in a multi-class model) — and that's a modeling
-choice the appendix doesn't make. We don't model it here.
-
-## Numerical conventions
-
-- Frequencies in cycles/unit; angular frequency in rad/s. Hz = ω / 2π.
-- 2D Fourier convention: V(k) = ∫ d²r v(r) e^{-i k·r}, with inverse
-  v(r) = ∫ d²k/(2π)² V(k) e^{i k·r}, and analogously in time.
-- Spatial integration weight: 2π f df dω/(2π) = f df dω (radial in 2D).
-- Centered ω grid: ω ∈ {(n − N/2) Δω}, with ifftshift before the FFT.
-- Cepstral minimum-phase fold: keep n=0 and n=N/2, double 0 < n < N/2,
-  zero out n > N/2.
-
-## Parameters used in the figures
-
-β = 2, A = 1, k0 = 0.05, σ_out = 1, P0 = 50.
-Band: f_max = 4 cyc/u, ω_min = 0.5 rad/s ≈ 0.08 Hz, ω_max = 400 rad/s
-≈ 64 Hz.
-Frequency grids: f ∈ geomspace(0.05, 5, 220) cyc/u; ω ∈ centered uniform
-2048 points spanning ±800 rad/s, giving Δω ≈ 0.78 rad/s and Δt ≈ 3.93 ms.
-Figure 4 uses a coarser grid (1024 × 120) since it requires hundreds of
-optimisation solves.
-
-## Validation
-
-All 44 focused tests pass in the local environment. The suite covers:
-
-- spectrum normalisation (drift Lorentzian integrates to C_I(f)) and
-  power-preservation in ω for both drift and linear motion;
-- saccade template causality (zero before t=0), settling to 1, and
-  overshoot magnitude consistent with zeta=0.6;
-- saccade Q kernel non-negativity, low-f f² rise (whitening regime),
-  and crossover scaling as 1/A (matching Mostofi et al. fig 3D);
-- saccade spectrum factorization C_sac = C_I · Q;
-- saccade trajectory windowing reduces spurious sinc-lobe ringing;
-- KKT optimality of the closed-form solver (relative residual ≤ 1e-10
-  on the active set);
-- water-filling reduction in the σ_in → 0 limit;
-- monotonicity of mutual information in P0;
-- causality and magnitude preservation of the cepstral min-phase
-  reconstruction;
-- soft Tukey band taper produces an early-peaked min-phase impulse
-  response (peak < 0.3 s for the test band);
-- analytic agreement of 2D spatial-kernel widths and peak values for a
-  Gaussian input.
-- analytic cycle generation, image-factorization, saccade selector spectra,
-  and `ArraySpectrum` compatibility with the
-  existing pipeline.
-- shared figure-facing spectrum panels, including exact reuse of the Figure 7
-  early/late cycle arrays in Figure 1b and Figure 1c.
-
-
-## Cell class learning
-
-The production cell-class workflow uses the fast optimizer by default. It keeps
-the same information objective and budget normalization as the reference
-optimizer, but runs only active in-band frequencies, initializes from the oracle
-filter stack, supports `device=auto`, and uses early stopping. Its default
-condition stack is the canonical Figure 7 analytic cycle split:
-`early_cycle = I(f)Q_saccade` and `late_cycle = I(f)Q_drift`.
-
+```text
+--skip-tests
+--skip-figures
+--with-cell-learning
+--with-cell-story
+--cell-outdir outputs/cell_classes
+--cell-story-outdir outputs/cell_classes_story
+--cell-kmax 4
+--cell-steps 1600
+--cell-restarts 2
+--cell-device auto
+--cell-dtype float32
 ```
+
+## Standard Figure Outputs
+
+`python run_all.py --skip-tests` runs these figure scripts:
+
+```text
+figures/fig1_power_spectra.py
+  outputs/fig1a_main.png
+  outputs/fig1b_boi_cycle.png
+  outputs/fig1c_library.png
+
+figures/fig2_optimal_filter.py
+  outputs/fig2_optimal_filter.png
+
+figures/fig3_kernels.py
+  outputs/fig3_kernels.png
+
+figures/fig4_information_vs_D.py
+  outputs/fig4_information_vs_D.png
+
+figures/fig5_kernel_slices.py
+  outputs/fig5_kernel_slices.png
+
+figures/fig6_saccade_kernels.py
+  outputs/fig6_saccade_kernels.png
+
+figures/fig6b_saccade_diagnostics.py
+  outputs/fig6b_saccade_diagnostics.png
+
+figures/fig6c_saccade_vs_drift_kernels.py
+  outputs/fig6c_saccade_vs_drift_kernels.png
+
+figures/fig7_rucci_cycle_spectra.py
+  outputs/fig7_rucci_cycle_spectra.png
+
+figures/fig8_mostofi_saccade_approximation.py
+  outputs/fig8_mostofi_saccade_approximation.png
+
+figures/figQ1_spectrum_library.py
+  outputs/figQ1_spectrum_library.png
+
+figures/figQ2_information_sweeps.py
+  outputs/figQ2_information_sweeps.png
+
+figures/figQ3_magno_parvo.py
+  outputs/figQ3_magno_parvo.png
+```
+
+The canonical early/late fixation-cycle spectra are generated once by
+`make_figure7_rucci_cycle_spectra()` and reused through
+`src.power_spectrum_library`. Use `cycle_solver_spectra()` for solver inputs
+and `cycle_decomposition_panels()` / `spectrum_library_panels()` for display
+panels. This keeps Figures 1, 6, 7, Q1, Q3, and the cell-class condition stack
+tied to the same cycle object.
+
+## Common Workflows
+
+Run the aliasing sanity check:
+
+```bash
+python scripts/check_aliasing_negligible.py
+```
+
+Audit movement spectra and separability assumptions:
+
+```bash
+python scripts/run_spectrum_audit.py --outdir outputs/spectrum_audit
+```
+
+Create the stationary-vs-active story figures:
+
+```bash
+python scripts/make_stationary_vs_active_story.py \
+  --grid fast \
+  --no-kernels \
+  --outdir outputs/stationary_vs_active_story
+```
+
+Run the default cell-class fit on the canonical early/late cycle pair:
+
+```bash
 python scripts/run_cell_class_learning.py \
   --grid fast \
   --kmax 4 \
@@ -276,18 +228,23 @@ python scripts/run_cell_class_learning.py \
   --device auto \
   --dtype float32 \
   --sigma-in 0.3 \
+  --sigma-out 1.0 \
   --P0 50 \
   --outdir outputs/cell_classes
 ```
 
-```
+Turn a saved cell-class fit into publication-style story figures:
+
+```bash
 python scripts/make_cell_class_story_figures.py \
   --indir outputs/cell_classes \
   --outdir outputs/cell_classes_story \
   --K 2
 ```
 
-```
+Run the input-noise sweep for reusable cell classes:
+
+```bash
 python scripts/run_cell_class_noise_sweep.py \
   --grid fast \
   --sigma-in-values 0.1,0.3,0.6,1.0 \
@@ -299,56 +256,27 @@ python scripts/run_cell_class_noise_sweep.py \
   --outdir outputs/cell_classes_noise_sweep
 ```
 
-For a slower optimizer comparison, add `--optimizer reference`.
+Run the larger movement-sweep cell-class experiment:
 
-
-## Extra calls
-
-```
-python scripts/run_spectrum_audit.py \
-  --outdir outputs/spectrum_audit
-```
-
-```
-python scripts/make_stationary_vs_active_story.py \
-  --grid fast \
-  --no-kernels \
-  --outdir outputs/stationary_vs_active_story
-```
-
-```
+```bash
 python scripts/run_cell_class_learning.py \
   --condition-set movement_sweep \
   --grid fast \
   --kmax 4 \
   --steps 1600 \
   --restarts 2 \
-  --n-saccades 32 \
-  --n-orientations 12 \
   --torch-threads 1 \
   --outdir outputs/cell_classes_movement_sweep
 ```
 
-```
-python scripts/run_cell_class_learning.py \
-  --condition-set movement_sweep \
-  --grid fast \
-  --kmax 3 \
-  --steps 300 \
-  --restarts 1 \
-  --n-saccades 4 \
-  --n-orientations 4 \
-  --torch-threads 1 \
-  --outdir outputs/cell_classes_movement_sweep_smoke
-```
+Compute information-vs-power curves for oracle and reusable class models:
 
-
-```
+```bash
 python scripts/run_information_power_curve.py \
   --condition-set movement_sweep \
   --grid fast \
   --k-values 1,2,3 \
-  --fit-mode full-refit \
+  --fit-mode fixed-H \
   --alpha-mode bounded_log_gain \
   --gain-delta-max 0.5 \
   --P-ref 50 \
@@ -359,5 +287,112 @@ python scripts/run_information_power_curve.py \
   --dtype float32 \
   --torch-threads 1 \
   --outdir outputs/information_power_curve
-
 ```
+
+For slower optimizer comparisons in the cell-class scripts, pass
+`--optimizer reference`.
+
+## Using the Pipeline in Code
+
+```python
+from src.pipeline import SolveConfig, run_many, extract_kernels
+from src.power_spectrum_library import drift_spectrum_specs
+
+specs = drift_spectrum_specs([0.05, 0.5, 5.0, 50.0])
+config = SolveConfig(sigma_in=0.3, sigma_out=1.0, P0=50.0, grid="hi_res")
+
+results = run_many(specs, config, kernels=True)
+for spec, result in zip(specs, results):
+    print(spec.key, result.I, result.f_peak)
+```
+
+For a single custom spectrum:
+
+```python
+from src.pipeline import run, extract_kernels
+from src.spectra import SaccadeSpectrum
+
+result = run(SaccadeSpectrum(A=2.5), sigma_in=0.3, sigma_out=1.0, P0=50.0)
+extract_kernels(result)
+```
+
+## Adding a Movement Spectrum
+
+New analyses should define spectra once and reuse the shared pipeline.
+
+1. Add or reuse a `Spectrum` class in `src/spectra.py` with a `C(f, omega)`
+   method.
+2. Add a small factory in `src/power_spectrum_library.py` that returns
+   `SpectrumSpec` objects with readable keys, labels, parameters, and
+   references.
+3. Register the factory in `SPECTRUM_SETS` if scripts should request it by
+   name.
+4. Run the specs with `src.pipeline.run_many(...)`, or convert them to
+   cell-class conditions with `conditions_from_spectrum_specs(...)`.
+
+Avoid rebuilding grids, masks, solver calls, or cycle spectra inside figure
+scripts when a shared entry point already exists.
+
+## Cell-Class Model
+
+The cell-class workflow learns a small number of reusable nonnegative filter
+power spectra `H_c(f, omega)`. For each movement condition `q`, the model forms
+a condition-dependent mixture
+
+```text
+G_raw[q] = sum_c alpha[q, c] H_c
+```
+
+and rescales it so every condition spends the same response-power budget `P0`.
+The objective is the same Gaussian mutual information used by the oracle
+efficient-coding solver, not a squared-error fit to the oracle filters.
+
+The default condition stack is the canonical Figure 7 pair:
+
+```text
+early_cycle = I(f) Q_saccade
+late_cycle  = I(f) Q_drift
+```
+
+`--condition-set movement_sweep` instead fits five early fixed-amplitude
+Mostofi saccade spectra and five late Brownian-drift spectra.
+
+## Tests
+
+The current test suite collects 52 tests:
+
+```text
+tests/test_cell_class_conditions.py
+tests/test_constrained_gain_learning.py
+tests/test_pipeline.py
+tests/test_power_spectrum_library.py
+tests/test_rucci_cycle_spectra.py
+tests/test_separable_stationary_control.py
+tests/test_spectrum_classes.py
+```
+
+`tests/test_constrained_gain_learning.py` uses `pytest.importorskip("torch")`,
+so the Torch-specific tests are skipped when Torch is not installed.
+
+## Numerical Conventions
+
+- Spatial frequency `f` is radial frequency in cycles per unit length.
+- Temporal frequency `omega` is angular frequency in rad/s; Hz is
+  `omega / (2*pi)`.
+- Radial integration uses the 2D spatial measure collapsed into `f df d omega`.
+- The temporal grid is centered and uniform; kernel reconstruction uses
+  `ifftshift` before FFT operations where needed.
+- The temporal kernel phase is recovered by cepstral minimum-phase
+  reconstruction after softening hard band edges with `soft_band_taper`.
+
+## Aliasing Note
+
+The main solver uses the direct, unaliased spectrum, following the
+dominant-copy assumption in the appendix. `scripts/check_aliasing_negligible.py`
+quantifies the size of folded copies for the shared band and parameter ranges.
+
+The short version: the assumption is more reliable at higher drift and with
+oversampling. At very low drift under critical sampling, folded high-spatial
+frequency power can be comparable to the direct in-band contribution. Modeling
+that case properly requires choosing an explicit mosaic structure, which this
+repository does not currently do.

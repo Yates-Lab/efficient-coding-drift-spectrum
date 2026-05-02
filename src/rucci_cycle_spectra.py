@@ -1,20 +1,18 @@
-"""Rucci-style saccade/fixation-cycle spectra for efficient-coding models.
+"""Analytic saccade/fixation-cycle spectra for efficient-coding models.
 
-This module implements a parsimonious trace-based generator for the two input
+This module implements a compact analytic generator for the two input
 spectra needed for the saccade/fixation-cycle hypothesis:
 
     early fixation:  C_early(f, omega) = I(f) Q_saccade(f, omega)
     late fixation:   C_late(f, omega)  = I(f) Q_drift(f, omega)
 
-The important design choice is that saccades are NOT modeled as a stationary
-Poisson jump process.  Instead, both saccades and drift are represented as
-explicit eye-position traces, and Q is estimated by the same Fourier-domain
-redistribution estimator used in the Rucci/Boi/Mostofi line of work:
+The important design choice is that the cycle is a selector over two analytic
+spectra, not a new spectrum built by adding drift and saccades:
 
-    Q(f, omega) = < | integral exp[-i 2*pi*f*n.x(t)] exp[-i omega t] dt |^2 > / T
+    early fixation: select the Mostofi-style saccade transient
+    late fixation:  select Brownian drift
 
-where the average is over eye-movement traces and spatial-frequency
-orientations n.  Multiplying Q by a natural-image spectrum I(f) gives the
+Multiplying each redistribution Q by a natural-image spectrum I(f) gives the
 retinal input spectrum seen by the efficient-coding solver.
 
 Conventions
@@ -28,16 +26,15 @@ Conventions
 
 Recommended use
 ---------------
-1. Generate the spectra once with `make_rucci_cycle_spectra`.
+1. Generate the spectra once with `make_cycle_spectra`.
 2. Feed `cycle.C_early_mod` or `cycle.C_early_total` and `cycle.C_late_total`
    to the efficient-coding solver.
 3. Use the `ArraySpectrum` wrapper if your pipeline expects objects with a
    `.C(f, omega)` method.
 
-For finite isolated saccade windows, `total` includes the static/DC component
-from immobile pre/post-saccadic periods.  `mod` subtracts the temporal mean of
-exp[-i 2*pi*f*n.x(t)] before Fourier transforming and is often the cleaner
-input for a retinal temporal band that excludes DC/adaptation-dominated power.
+For compatibility with older figure code the container still exposes
+`Q_saccade_total` and `Q_saccade_mod`.  With the analytic Mostofi transient
+they are identical movement-induced spectra.
 """
 
 from __future__ import annotations
@@ -47,6 +44,8 @@ from functools import lru_cache
 from typing import Optional, Tuple
 
 import numpy as np
+
+from src.spectra import mostofi_saccade_amplitude_average
 
 TWOPI = 2.0 * np.pi
 
@@ -557,33 +556,25 @@ def make_rucci_cycle_spectra(
 ) -> RucciCycleSpectra:
     """Generate early/saccade and late/drift spectra for the cycle.
 
-    Both Q_total and Q_mod are returned.  The corresponding C arrays are simply
-    I(f)[:, None] multiplied by Q.
+    Saccade power uses the analytic Mostofi-style approximation averaged over
+    the configured amplitude distribution.  Drift uses the analytic Brownian
+    redistribution unless ``drift_mode='trace'`` is explicitly requested.
+    The corresponding C arrays are simply I(f)[:, None] multiplied by Q.
     """
     f = np.atleast_1d(np.asarray(f, dtype=float)).ravel()
     omega = np.atleast_1d(np.asarray(omega, dtype=float)).ravel()
     I = image_spectrum(f, image_params)
 
-    sac_traces, sac_t, A = make_saccade_traces(saccade_params)
+    A = sample_saccade_amplitudes(saccade_params)
     drift_mode = drift_mode.lower()
     if drift_mode not in {"analytic_brownian", "trace"}:
         raise ValueError("drift_mode must be 'analytic_brownian' or 'trace'")
 
-    Q_sac_total = estimate_Q_from_traces(
-        f, omega, sac_traces, sac_t,
-        params=estimator_params,
-        subtract_temporal_mean=False,
-    )
-    Q_sac_mod = estimate_Q_from_traces(
-        f, omega, sac_traces, sac_t,
-        params=estimator_params,
-        subtract_temporal_mean=True,
-    )
+    Q_sac_total = mostofi_saccade_amplitude_average(f, omega, A)
+    Q_sac_mod = Q_sac_total.copy()
     if drift_mode == "analytic_brownian":
-        # The empirical Rucci/Boi drift estimator is based on displacement
-        # probability.  With our OU trace parameters, the long-time Brownian
-        # limit gives the smooth population spectrum without finite-window
-        # periodogram bands.
+        # The late fixation state is analytic Brownian drift, avoiding
+        # finite-window periodogram bands.
         Q_drift_total = brownian_drift_Q(f, omega, drift_params.D_eff_deg2_s)
         Q_drift_mod = Q_drift_total.copy()
     else:
@@ -637,11 +628,11 @@ def figure7_cycle_grid() -> Tuple[np.ndarray, np.ndarray]:
 
 @lru_cache(maxsize=1)
 def make_figure7_rucci_cycle_spectra() -> RucciCycleSpectra:
-    """Generate the single canonical Rucci/Boi-style Figure 7 spectrum.
+    """Generate the single canonical analytic cycle spectrum.
 
     This is the source-of-truth spectrum for all early/late cycle analyses:
 
-        early: C_early = I(f) Q_saccade_mod
+        early: C_early = I(f) Q_saccade
         late:  C_late  = I(f) Q_drift_total
     """
     f, omega = figure7_cycle_grid()
@@ -705,7 +696,7 @@ class ArraySpectrum:
         self._omega_interp = self.omega[order]
         self._C_interp = self._C[:, order].copy()
         if self.ignore_dc_for_interp:
-            # The Rucci/Boi cycle figures intentionally display nonzero temporal
+            # The cycle figures intentionally display nonzero temporal
             # frequencies.  The Brownian late-fixation spectrum has a huge DC
             # bin, and including that bin in interpolation leaks artificial
             # near-zero power into solver grids whose first positive frequency
@@ -748,11 +739,9 @@ class ArraySpectrum:
 def spectra_as_wrappers(cycle: RucciCycleSpectra, *, use_modulated_early: bool = True) -> Tuple[ArraySpectrum, ArraySpectrum]:
     """Return (early, late) ArraySpectrum wrappers for the existing pipeline."""
     early_C = cycle.C_early_mod if use_modulated_early else cycle.C_early_total
-    early_label = "Rucci synthetic early fixation: saccade transient"
-    if use_modulated_early:
-        early_label += " (temporal mean removed)"
+    early_label = "early fixation: Mostofi analytic saccade transient"
     late_C = cycle.C_late_total
-    late_label = f"Rucci synthetic late fixation: OU drift (D_eff={cycle.drift_D_eff_deg2_s:.4g} deg^2/s)"
+    late_label = f"late fixation: Brownian drift (D={cycle.drift_D_eff_deg2_s:.4g} deg^2/s)"
     return (
         ArraySpectrum(cycle.f, cycle.omega, early_C, early_label, ignore_dc_for_interp=True),
         ArraySpectrum(cycle.f, cycle.omega, late_C, late_label, ignore_dc_for_interp=True),

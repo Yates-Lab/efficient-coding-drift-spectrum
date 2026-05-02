@@ -1,66 +1,66 @@
 [
   {
     "index": 0,
+    "name": "early_A_0.5",
+    "epoch": "early",
+    "parameter_name": "A",
+    "parameter_value": 0.5,
+    "weight": 0.1,
+    "I_star": 2.7913621003435822
+  },
+  {
+    "index": 1,
     "name": "early_A_1",
     "epoch": "early",
     "parameter_name": "A",
     "parameter_value": 1.0,
     "weight": 0.1,
-    "I_star": 1.4055147116444813
+    "I_star": 2.9045235367027846
   },
   {
-    "index": 1,
+    "index": 2,
     "name": "early_A_2",
     "epoch": "early",
     "parameter_name": "A",
     "parameter_value": 2.0,
     "weight": 0.1,
-    "I_star": 1.5046213285477217
+    "I_star": 2.945005596647322
   },
   {
-    "index": 2,
+    "index": 3,
     "name": "early_A_4",
     "epoch": "early",
     "parameter_name": "A",
     "parameter_value": 4.0,
     "weight": 0.1,
-    "I_star": 1.547919538416778
-  },
-  {
-    "index": 3,
-    "name": "early_A_6",
-    "epoch": "early",
-    "parameter_name": "A",
-    "parameter_value": 6.0,
-    "weight": 0.1,
-    "I_star": 1.5663236958460705
+    "I_star": 2.9574436683475565
   },
   {
     "index": 4,
-    "name": "early_A_8",
+    "name": "early_A_7",
     "epoch": "early",
     "parameter_name": "A",
-    "parameter_value": 8.0,
+    "parameter_value": 7.0,
     "weight": 0.1,
-    "I_star": 1.571329456845498
+    "I_star": 2.965374128671918
   },
   {
     "index": 5,
-    "name": "late_D_0.0375",
-    "epoch": "late",
-    "parameter_name": "D",
-    "parameter_value": 0.0375,
-    "weight": 0.1,
-    "I_star": 1.5640964364054404
-  },
-  {
-    "index": 6,
     "name": "late_D_0.075",
     "epoch": "late",
     "parameter_name": "D",
     "parameter_value": 0.075,
     "weight": 0.1,
-    "I_star": 1.6011628900157362
+    "I_star": 2.921876220060527
+  },
+  {
+    "index": 6,
+    "name": "late_D_0.1",
+    "epoch": "late",
+    "parameter_name": "D",
+    "parameter_value": 0.1,
+    "weight": 0.1,
+    "I_star": 2.9335454905369476
   },
   {
     "index": 7,
@@ -69,7 +69,7 @@
     "parameter_name": "D",
     "parameter_value": 0.15,
     "weight": 0.1,
-    "I_star": 1.6198346748800878
+    "I_star": 2.945904033102683
   },
   {
     "index": 8,
@@ -78,7 +78,7 @@
     "parameter_name": "D",
     "parameter_value": 0.3,
     "weight": 0.1,
-    "I_star": 1.6317106842147697
+    "I_star": 2.960744798800626
   },
   {
     "index": 9,
@@ -87,6 +87,6 @@
     "parameter_name": "D",
     "parameter_value": 0.6,
     "weight": 0.1,
-    "I_star": 1.6386439555951915
+    "I_star": 2.9692840031615355
   }
 ]

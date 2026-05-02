@@ -1,4 +1,4 @@
-"""Tests for the trace-based Rucci/Boi cycle spectra."""
+"""Tests for the analytic saccade/fixation-cycle spectra."""
 
 from __future__ import annotations
 
@@ -139,11 +139,11 @@ def test_cycle_spectra_shapes_and_image_factorization():
     )
 
 
-def test_saccade_mod_removes_static_component():
+def test_saccade_total_and_mod_match_for_analytic_transient():
     cycle = _small_cycle()
     total_power = temporal_power_integral(cycle.Q_saccade_total, cycle.omega)
     mod_power = temporal_power_integral(cycle.Q_saccade_mod, cycle.omega)
-    assert np.median(total_power) > np.median(mod_power)
+    np.testing.assert_allclose(total_power, mod_power, rtol=1e-12)
     assert np.any(cycle.Q_saccade_mod > 0)
 
 

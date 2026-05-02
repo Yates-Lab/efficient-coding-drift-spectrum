@@ -5,8 +5,9 @@ Compares the on-retina spectrum and the optimal filter / kernels across
 the full spectrum library:
   - drift only (Kuang)
   - saccade only (Mostofi)
-  - drift + saccade unified stationary (this work)
-  - Rucci/Boi cycle: late (= drift) and early (saccade transient)
+  - Dong-Atick linear motion
+  - Dong-Atick separable approximation
+  - fixation cycle selector: late (= drift) and early (= saccade transient)
 
 For a fair visual comparison we keep image, noise, and budget fixed and
 sweep the movement model. Three rows: spatial input spectrum |C(f, ω)|

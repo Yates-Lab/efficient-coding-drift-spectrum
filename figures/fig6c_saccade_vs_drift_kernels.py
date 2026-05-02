@@ -1,19 +1,9 @@
-"""Figure 6c: saccade-vs-equivalent-drift kernel comparison.
+"""Figure 6c: saccade-vs-drift kernel comparison.
 
-For three saccade amplitudes A, compute the optimal kernel under the
-saccade model and under a drift model with the matched effective
-diffusion coefficient D_eff = π² λ A². At small kA (microsaccades),
-the saccade Q reduces to a drift Lorentzian with this D_eff, so the
-kernels should agree. At large kA (medium and large saccades), the
-saccade Q saturates while the drift Q keeps growing as k², so the
-kernels diverge: drift produces broad spatial kernels and saccades
-produce narrow ones.
-
-This is the answer to the question "if saccades behave like drift,
-why don't large saccades give broad spatial kernels?" Large saccades
-have high D_eff, but the saturation regime caps the high-spatial-
-frequency amplification, so the optimal filter doesn't extend to
-high f the way a true high-D drift would.
+The fixation-cycle model is a selector: early fixation uses the Mostofi
+analytic saccade transient and late fixation uses Brownian drift.  This figure
+compares their resulting kernels without invoking the old equivalent-drift
+Poisson-saccade construction.
 """
 
 from __future__ import annotations
@@ -26,19 +16,17 @@ import matplotlib.pyplot as plt
 
 from src.pipeline import SolveConfig, run_many
 from src.plotting import setup_style
-from src.power_spectrum_library import equivalent_saccade_drift_pair_specs
+from src.power_spectrum_library import drift_spectrum_specs, saccade_spectrum_specs
 
 setup_style()
 
 
 def fig6c():
     sigma_in, sigma_out, P0 = 0.3, 1.0, 50.0
-    lam = 3.0
-
     cases = [
-        (0.3, "small (microsaccade)"),
-        (2.5, "medium (typical natural)"),
-        (7.0, "large"),
+        (0.5, 0.035, "small saccade / slow drift"),
+        (2.5, 0.075, "medium saccade / canonical drift"),
+        (7.0, 0.30, "large saccade / fast drift"),
     ]
 
     fig, axes = plt.subplots(2, 3, figsize=(12.5, 6.6),
@@ -49,9 +37,9 @@ def fig6c():
     color_sac = "#1f6fb4"
     color_drift = "#d8540e"
 
-    spec_pairs = equivalent_saccade_drift_pair_specs([A for A, _ in cases], lam=lam)
-    for col, ((A, label), (sac_spec, drift_spec)) in enumerate(zip(cases, spec_pairs)):
-        D_eff = drift_spec.parameters["D"]
+    for col, (A, D, label) in enumerate(cases):
+        sac_spec = saccade_spectrum_specs([A])[0]
+        drift_spec = drift_spectrum_specs([D])[0]
         sac_result, drift_result = run_many(
             [sac_spec, drift_spec],
             SolveConfig(sigma_in=sigma_in, sigma_out=sigma_out, P0=P0, grid="hi_res"),
@@ -70,7 +58,7 @@ def fig6c():
         ax_sp.plot(r_s, vr_s_n, color=color_sac, lw=1.6,
                    label=rf"saccade $A={A:g}^\circ$ ($I^*={sac_result.I:.2f}$)")
         ax_sp.plot(r_d, vr_d_n, color=color_drift, lw=1.4, ls="--",
-                   label=rf"drift $D_\mathrm{{eff}}={D_eff:.1f}$ ($I^*={drift_result.I:.2f}$)")
+                   label=rf"drift $D={D:g}$ ($I^*={drift_result.I:.2f}$)")
         ax_sp.set_xlim(-3.0, 3.0)
         ax_sp.axhline(0.0, color="0.7", lw=0.4)
         ax_sp.axvline(0.0, color="0.85", lw=0.3)
@@ -84,7 +72,7 @@ def fig6c():
         ax_t.plot(t_s, ht_s_n, color=color_sac, lw=1.6,
                   label="saccade")
         ax_t.plot(t_d, ht_d_n, color=color_drift, lw=1.4, ls="--",
-                  label=rf"drift $D_\mathrm{{eff}}={D_eff:.1f}$")
+                  label=rf"drift $D={D:g}$")
         ax_t.set_xlim(0.0, 0.4)
         ax_t.axhline(0.0, color="0.7", lw=0.4)
         ax_t.set_xlabel(r"$t$ (s)")
@@ -93,9 +81,7 @@ def fig6c():
         ax_t.legend(loc="best", fontsize=7, frameon=False)
 
     fig.suptitle(
-        r"Saccades vs equivalent drift ($D_\mathrm{eff} = \pi^2 \lambda A^2$).  "
-        r"Match at small $A$ (small $kA$ regime) but diverge at large $A$  "
-        r"due to saccade saturation cap at $f_c = 1/(2A)$.",
+        "Mostofi saccade transients versus Brownian drift selector states",
         y=0.97, fontsize=10,
     )
 

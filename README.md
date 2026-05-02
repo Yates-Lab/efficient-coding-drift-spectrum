@@ -10,8 +10,9 @@ Given a power-law image spectrum
 
     C_I(f) = A / (f^2 + k0^2)^(β/2),
 
-a movement model (Brownian drift, Gaussian linear motion, stationary
-saccade controls, or trace-based Rucci/Boi fixation-cycle spectra), and a
+a movement model (Brownian drift, Mostofi analytic saccade transients,
+Dong-Atick Gaussian linear motion, Dong-Atick separable controls, or the
+early/late fixation-cycle selector), and a
 fixed band B = { (f, ω) : 0 ≤ f ≤ f_max,
 ω_min ≤ |ω| ≤ ω_max }, this codebase
 
@@ -26,23 +27,19 @@ fixed band B = { (f, ω) : 0 ≤ f ≤ f_max,
 3. reconstructs causal minimum-phase temporal kernels and 2D spatial
    kernels from the magnitude solution (`src/kernels.py`).
 
-The main fixation-cycle path is trace based (`src/rucci_cycle_spectra.py`).
-It generates isolated saccade traces and smooth drift traces, estimates
-both movement redistribution spectra with the same orientation-averaged
-Fourier-power estimator, and returns the two inputs needed by the solver:
+The main fixation-cycle path is analytic (`src/rucci_cycle_spectra.py`).
+It selects between the Mostofi cumulative-Gaussian saccade approximation and
+the Kuang/Brownian drift derivation, returning the two inputs needed by the solver:
 early fixation `C_early = I(f) Q_saccade` and late fixation
-`C_late = I(f) Q_drift`. By default, late drift uses the smooth Brownian
-displacement-probability limit implied by the OU trace parameters, avoiding
-finite-window periodogram bands. The older stationary Poisson saccade formulas
-remain in `src/spectra.py` as analytic controls.
+`C_late = I(f) Q_drift`.
 
-`make_figure7_rucci_cycle_spectra()` is the canonical Rucci-style cycle
+`make_figure7_rucci_cycle_spectra()` is the canonical analytic cycle
 source for the paper figures. Figure-facing spectrum panels are centralized in
 `src/power_spectrum_library.py`, so Figure 1b and 1c use the same positive-Hz
 Figure 7 arrays. Figure 6, Q1, and Q3 get their solver inputs from
 `cycle_solver_spectra()` / `spectrum_comparison_specs()` in that same module,
 so filter reconstructions and spectrum panels stay tied to the same cached
-Figure 7 cycle object instead of regenerating per-figure trace estimates.
+Figure 7 cycle object.
 
 The optimization is done on the direct (unaliased) spectrum, following
 the appendix's working assumption that the m=0 copy dominates. See the
@@ -52,10 +49,10 @@ the appendix's working assumption that the m=0 copy dominates. See the
 
 ```
 src/
-    spectra.py     drift, Gaussian linear motion, saccade redistribution,
-                   combined drift+motion spectra, analytic controls
+    spectra.py     drift, Mostofi saccade, Dong-Atick linear and separable
+                   spectra, analytic controls
     rucci_cycle_spectra.py
-                   trace-generated Rucci/Boi early and late cycle spectra
+                   analytic early and late cycle selector spectra
     power_spectrum_library.py
                    shared Figure 1b/1c panels and solver spectra from the
                    canonical Figure 7 cycle source
@@ -76,15 +73,17 @@ figures/
     fig4_information_vs_D.py     I*(D) inverted-U for varying σ_in
     fig5_kernel_slices.py        kernels at fixed ω₀ and f₀ slices
     fig6_saccade_kernels.py      spatial and temporal kernels under the
-                                 Rucci/Boi early and late cycle spectra
+                                 analytic early and late cycle spectra
     fig6b_saccade_diagnostics.py  diagnostic: 2D Q kernel, spatial /
                                  temporal profiles, and saccade-vs-drift
                                  spectrum comparison
-    fig7_rucci_cycle_spectra.py   trace-estimated Q and C for early saccade
-                                 and late drift cycle regimes
+    fig7_rucci_cycle_spectra.py   analytic Q and C for early saccade and
+                                 late drift cycle regimes
+    fig8_mostofi_saccade_approximation.py
+                                 Mostofi Figure 4 reproduction
     figQ1_spectrum_library.py     supplemental spectrum/solver library
     figQ2_information_sweeps.py   supplemental information sweeps
-    figQ3_magno_parvo.py          Rucci/Boi cycle kernels and summary
+    figQ3_magno_parvo.py          analytic cycle kernels and summary
 scripts/
     check_aliasing_negligible.py validation that the m=0 copy assumption
                                  is acceptable for the band/parameters used
@@ -120,8 +119,8 @@ rebuild grids, masks, Lagrange multiplier solves, or kernel reconstruction.
 
 ## What each figure shows
 
-**Figure 1.** Brownian drift Lorentzian, stationary saccade controls,
-Gaussian-linear-motion spectra, and the trace-based Rucci/Boi early/late
+**Figure 1.** Brownian drift Lorentzian, Mostofi saccade transients,
+Gaussian-linear-motion spectra, and the analytic early/late
 cycle decomposition. The white line marks characteristic crossovers
 where they are meaningful.
 
@@ -156,8 +155,8 @@ across all noise levels; D* shifts to higher values as σ_in grows.
 slices broaden in space; high-f₀ slices peak earlier in time.
 
 **Figure 6.** Spatial and temporal kernels of the optimal filter under
-the canonical Figure 7 trace-based Rucci/Boi cycle spectra. The early condition uses
-`C_early_mod = I(f) Q_saccade_mod`; the late condition uses
+the canonical Figure 7 analytic cycle spectra. The early condition uses
+`C_early = I(f) Q_saccade`; the late condition uses
 `C_late_total = I(f) Q_drift_total`. The figure sweeps σ_in and compares
 the resulting early and late spatial/temporal kernels.
 
@@ -177,18 +176,15 @@ The figure also prints numerical sanity checks: low-f log-log slope
 (predicted 2.0; measured 1.98), and 1/A scaling of the crossover
 (predicted ratio 4.0 between A=1° and A=4°; measured 4.01).
 
-**Figure 7.** The trace-based Rucci/Boi cycle spectra used for the
-early-vs-late fixation question. It plots `Q_saccade_mod`,
-`I(f) Q_saccade_mod`, `Q_drift_total`, and `I(f) Q_drift_total`; it also
+**Figure 7.** The analytic cycle spectra used for the
+early-vs-late fixation question. It plots `Q_saccade`,
+`I(f) Q_saccade`, `Q_drift_total`, and `I(f) Q_drift_total`; it also
 saves `outputs/rucci_cycle_spectra_demo.npz`. This same source spectrum is
 used by the other cycle figures through `src.power_spectrum_library`.
 
-**Note on finite-window estimation.** The trace-based saccade estimator
-uses finite 512 ms saccade-centered segments, matching the Rucci/Mostofi
-procedure. Small synthetic sample counts can reveal periodogram sidelobes,
-so the implementation applies mild temporal smoothing while preserving
-row-wise temporal power. Late drift defaults to the smooth Brownian
-displacement-probability limit implied by the OU trace parameters.
+**Figure 8.** Synthetic reproduction of Mostofi et al. Figure 4 using the
+cumulative-Gaussian-smoothed saccade transient. This is the same saccade
+approximation used by `SaccadeSpectrum` and the early fixation selector.
 
 ## Aliasing
 
@@ -235,7 +231,7 @@ optimisation solves.
 
 ## Validation
 
-All 45 tests pass in the local environment. The suite covers:
+All 44 focused tests pass in the local environment. The suite covers:
 
 - spectrum normalisation (drift Lorentzian integrates to C_I(f)) and
   power-preservation in ω for both drift and linear motion;
@@ -255,8 +251,8 @@ All 45 tests pass in the local environment. The suite covers:
   response (peak < 0.3 s for the test band);
 - analytic agreement of 2D spatial-kernel widths and peak values for a
   Gaussian input.
-- trace-based Rucci/Boi cycle generation, image-factorization, total vs
-  modulated saccade spectra, and `ArraySpectrum` compatibility with the
+- analytic cycle generation, image-factorization, saccade selector spectra,
+  and `ArraySpectrum` compatibility with the
   existing pipeline.
 - shared figure-facing spectrum panels, including exact reuse of the Figure 7
   early/late cycle arrays in Figure 1b and Figure 1c.
@@ -268,7 +264,7 @@ The production cell-class workflow uses the fast optimizer by default. It keeps
 the same information objective and budget normalization as the reference
 optimizer, but runs only active in-band frequencies, initializes from the oracle
 filter stack, supports `device=auto`, and uses early stopping. Its default
-condition stack is the canonical Figure 7 Rucci/Boi cycle split:
+condition stack is the canonical Figure 7 analytic cycle split:
 `early_cycle = I(f)Q_saccade` and `late_cycle = I(f)Q_drift`.
 
 ```

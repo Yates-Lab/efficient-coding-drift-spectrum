@@ -6,7 +6,7 @@
     "parameter_name": "cycle_phase",
     "parameter_value": 0.0,
     "weight": 0.5,
-    "I_star": 1.5944554975836238
+    "I_star": 1.5899002353348184
   },
   {
     "index": 1,
@@ -15,6 +15,6 @@
     "parameter_name": "cycle_phase",
     "parameter_value": 1.0,
     "weight": 0.5,
-    "I_star": 1.4579334524483476
+    "I_star": 1.7428681175312746
   }
 ]

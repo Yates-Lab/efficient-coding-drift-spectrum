@@ -6,8 +6,8 @@ The 2D spectrum is recovered by rotational symmetry where applicable.
 Two complementary APIs are provided:
 
 1. Free functions (legacy). image_spectrum, drift_spectrum,
-   linear_motion_spectrum_gaussian, combined_spectrum, saccade_template,
-   saccade_redistribution, saccade_spectrum. These keep the original
+   linear_motion_spectrum_gaussian, combined_spectrum,
+   mostofi_saccade_redistribution, saccade_spectrum. These keep the original
    signatures so that existing tests and figures continue to work.
 
 2. Spectrum classes. Each class stores its parameters and provenance and
@@ -17,16 +17,14 @@ Two complementary APIs are provided:
        StaticImageSpectrum            Field 1987
        DriftSpectrum                  Kuang et al. 2012, Aytekin et al. 2014
        LinearMotionSpectrum           Dong & Atick 1995
-       SaccadeSpectrum                Mostofi et al. 2020
-       DriftPlusSaccadeSpectrum       unified stationary; this work
+       SaccadeSpectrum                Mostofi et al. 2020 approximation
        BoiCycleEarlySpectrum          Boi et al. 2017, early-fixation regime
        BoiCycleLateSpectrum           Boi et al. 2017, late-fixation regime
 
-The operational Rucci/Boi saccade-fixation cycle reconstruction lives in
-src.rucci_cycle_spectra.  It estimates Q_saccade and Q_drift from explicit
-eye-position traces with the same orientation-averaged Fourier-power estimator.
-The stationary Poisson saccade formulas in this module are kept as legacy
-analytic controls.
+The operational saccade-fixation cycle reconstruction lives in
+src.rucci_cycle_spectra.  It now selects between the analytic Mostofi-style
+saccade transient and analytic Brownian drift, rather than estimating saccade
+power from synthetic traces.
 
 Conventions
 -----------
@@ -171,6 +169,89 @@ def separable_movie_spectrum(
 # Saccades (free functions)
 # ---------------------------------------------------------------------------
 
+def saccade_main_sequence_duration(A, base_s=0.021, slope_s_per_deg=0.0022):
+    """Approximate saccade duration in seconds from amplitude in degrees."""
+    A = np.asarray(A, dtype=float)
+    return float(base_s) + float(slope_s_per_deg) * A
+
+
+def saccade_smoothing_sigma(A, duration_divisor=8.0):
+    """Gaussian smoothing sigma for the cumulative-Gaussian transient model."""
+    return saccade_main_sequence_duration(A) / float(duration_divisor)
+
+
+def mostofi_saccade_redistribution(
+    f,
+    omega,
+    A,
+    *,
+    duration_divisor: float = 8.0,
+    omega_floor: float = 1e-15,
+) -> np.ndarray:
+    """Mostofi-style analytic saccade-transient redistribution.
+
+    The approximation treats a saccade as a cumulative-Gaussian-smoothed step.
+    For a fixed amplitude A,
+
+        Q_sac(f, omega; A) =
+            2 [1 - J_0(2 pi f A)] exp[-(omega sigma(A))^2] / omega^2.
+
+    The spatial term is the orientation-averaged power of a displacement step;
+    the temporal term is the smoothed-step power spectrum.  This is not a
+    stationary Poisson jump model and is not power-normalized like Brownian
+    drift.  It is the analytic approximation used for the Mostofi Figure 4
+    reproduction and the early saccade/fixation-cycle condition.
+    """
+    from scipy.special import j0
+
+    f_arr = np.atleast_1d(np.asarray(f, dtype=float)).ravel()
+    omega_arr = np.atleast_1d(np.asarray(omega, dtype=float)).ravel()
+    A = float(A)
+    if A == 0.0:
+        return np.zeros((f_arr.size, omega_arr.size), dtype=float)
+    spatial = 2.0 * (1.0 - j0(2.0 * np.pi * f_arr[:, None] * A))
+    sigma = float(saccade_smoothing_sigma(A, duration_divisor=duration_divisor))
+    w = np.abs(omega_arr)[None, :]
+    temporal = np.exp(-(w * sigma) ** 2) / np.maximum(w ** 2, float(omega_floor) ** 2)
+    return np.maximum(spatial * temporal, 0.0)
+
+
+def mostofi_saccade_amplitude_average(
+    f,
+    omega,
+    amplitudes,
+    *,
+    weights=None,
+    duration_divisor: float = 8.0,
+    omega_floor: float = 1e-15,
+) -> np.ndarray:
+    """Average the Mostofi transient approximation over saccade amplitudes."""
+    from scipy.special import j0
+
+    f_arr = np.atleast_1d(np.asarray(f, dtype=float)).ravel()
+    omega_arr = np.atleast_1d(np.asarray(omega, dtype=float)).ravel()
+    A = np.atleast_1d(np.asarray(amplitudes, dtype=float)).ravel()
+    if A.size == 0:
+        raise ValueError("amplitudes must contain at least one value")
+    if weights is None:
+        w_amp = np.full(A.size, 1.0 / A.size, dtype=float)
+    else:
+        w_amp = np.asarray(weights, dtype=float).ravel()
+        if w_amp.size != A.size:
+            raise ValueError("weights must have the same length as amplitudes")
+        if np.any(w_amp < 0.0) or w_amp.sum() <= 0.0:
+            raise ValueError("weights must be nonnegative and sum positive")
+        w_amp = w_amp / w_amp.sum()
+
+    spatial = 2.0 * (1.0 - j0(2.0 * np.pi * f_arr[:, None] * A[None, :]))
+    sigma = saccade_smoothing_sigma(A, duration_divisor=duration_divisor)
+    om = np.abs(omega_arr)[None, :]
+    temporal = np.exp(-(sigma[:, None] * om) ** 2) / np.maximum(
+        om ** 2, float(omega_floor) ** 2
+    )
+    return np.maximum((spatial * w_amp[None, :]) @ temporal, 0.0)
+
+
 def saccade_template(t, peak_time=0.040, zeta=0.6):
     """Unit-amplitude saccade trajectory u(t) (dimensionless).
 
@@ -196,23 +277,12 @@ def saccade_template(t, peak_time=0.040, zeta=0.6):
 
 
 def saccade_redistribution(f, omega, A, lam=3.0):
-    """Saccade redistribution kernel Q_sac(f, ω; A, λ).
+    """Backward-compatible alias for the Mostofi transient approximation.
 
-    Stationary Poisson-process model (closed-form):
-        Q(k, ω) = 2 λ α(k) / ((λ α(k))² + ω²),
-        α(k) = 1 - J_0(2π k A).
+    ``lam`` is accepted for old call sites but ignored; saccade power is no
+    longer modeled as a stationary Poisson jump Lorentzian.
     """
-    from scipy.special import j0
-
-    f_arr = np.atleast_1d(np.asarray(f, dtype=float)).ravel()
-    omega_arr = np.atleast_1d(np.asarray(omega, dtype=float)).ravel()
-
-    F = f_arr[:, None]
-    W = omega_arr[None, :]
-    alpha_k = 1.0 - j0(2.0 * np.pi * F * A)
-    eff = lam * alpha_k
-    Q = 2.0 * eff / (eff ** 2 + W ** 2)
-    return Q
+    return mostofi_saccade_redistribution(f, omega, A=A)
 
 
 def saccade_spectrum(f, omega, A, lam=3.0, beta=2.0, A_image=1.0, k0=0.05):
@@ -432,13 +502,16 @@ class SeparableMovieSpectrum(Spectrum):
 
 @dataclass(frozen=True)
 class SaccadeSpectrum(Spectrum):
-    """Stationary Poisson-process saccades (Mostofi et al. 2020; closed-form).
+    """Mostofi et al. 2020 analytic saccade-transient approximation.
 
-    Amplitude A in length units; rate lam in events / s.
-    Drift limit (small kA): D_eff = π² λ A².
+    Amplitude A is in degrees or the same spatial unit as f.  ``lam`` remains
+    as an ignored compatibility field for older scripts; this spectrum is the
+    cumulative-Gaussian-smoothed step approximation, not a Poisson jump process.
     """
     A: float = 2.5
-    lam: float = 3.0
+    lam: float = 0.0
+    duration_divisor: float = 8.0
+    omega_floor: float = 1e-15
     image: ImageParams = DEFAULT_IMAGE
 
     def __post_init__(self):
@@ -447,54 +520,17 @@ class SaccadeSpectrum(Spectrum):
 
     @property
     def D_eff(self) -> float:
-        """Drift-equivalent diffusion in the small-kA limit."""
-        return np.pi ** 2 * self.lam * self.A ** 2
+        """No stationary drift-equivalent diffusion exists for this transient."""
+        return np.nan
 
     def redistribution(self, f, omega) -> np.ndarray:
-        return saccade_redistribution(f, omega, A=self.A, lam=self.lam)
-
-    def C(self, f, omega) -> np.ndarray:
-        f_arr = np.atleast_1d(np.asarray(f, dtype=float)).ravel()
-        return self.image.C(f_arr)[:, None] * self.redistribution(f_arr, omega)
-
-
-@dataclass(frozen=True)
-class DriftPlusSaccadeSpectrum(Spectrum):
-    """Unified stationary spectrum for drift and Poisson saccades.
-
-    Treating drift and saccade jumps as statistically independent
-    displacement processes, the displacement autocorrelation factorizes
-    and the cumulant rate adds inside the Lorentzian:
-
-        Q_tot(k, ω) = 2 α_tot(k) / (α_tot(k)² + ω²),
-        α_tot(k) = D k² + λ (1 - J_0(2π k A)).
-
-    Reductions:
-        - lam = 0 (or A = 0):   recovers DriftSpectrum exactly
-        - D = 0:                recovers SaccadeSpectrum exactly
-    """
-    D: float = 1.0
-    A: float = 2.5
-    lam: float = 3.0
-    image: ImageParams = DEFAULT_IMAGE
-
-    def __post_init__(self):
-        object.__setattr__(self, "name", "drift+saccade")
-        object.__setattr__(self, "reference", "this work (unified stationary)")
-
-    def alpha_tot(self, f) -> np.ndarray:
-        from scipy.special import j0
-        f_arr = np.atleast_1d(np.asarray(f, dtype=float)).ravel()
-        drift_term = self.D * f_arr ** 2
-        sacc_term = self.lam * (1.0 - j0(2.0 * np.pi * f_arr * self.A))
-        return drift_term + sacc_term
-
-    def redistribution(self, f, omega) -> np.ndarray:
-        f_arr = np.atleast_1d(np.asarray(f, dtype=float)).ravel()
-        omega_arr = np.atleast_1d(np.asarray(omega, dtype=float)).ravel()
-        a = self.alpha_tot(f_arr)[:, None]
-        w = omega_arr[None, :]
-        return 2.0 * a / (a ** 2 + w ** 2)
+        return mostofi_saccade_redistribution(
+            f,
+            omega,
+            A=self.A,
+            duration_divisor=self.duration_divisor,
+            omega_floor=self.omega_floor,
+        )
 
     def C(self, f, omega) -> np.ndarray:
         f_arr = np.atleast_1d(np.asarray(f, dtype=float)).ravel()
@@ -656,10 +692,7 @@ class BoiCycleEarlySpectrum(Spectrum):
         object.__setattr__(self, "reference", "Boi et al. 2017")
 
     def redistribution(self, f, omega) -> np.ndarray:
-        return _windowed_saccade_redistribution(
-            f, omega, A=self.A, T_win=self.T_win,
-            peak_time=self.peak_time, zeta=self.zeta,
-        )
+        return mostofi_saccade_redistribution(f, omega, A=self.A)
 
     def C(self, f, omega) -> np.ndarray:
         f_arr = np.atleast_1d(np.asarray(f, dtype=float)).ravel()
@@ -705,7 +738,7 @@ class BoiEarlyCleanApprox(Spectrum):
     T_win: float = 0.512
     n_t: int = 2048
     n_fft: int = 8192
-    temporal_model: str = "analytic"  # "analytic" or "fft"
+    temporal_model: str = "mostofi"
     image: ImageParams = DEFAULT_IMAGE
 
     def __post_init__(self):
@@ -723,19 +756,17 @@ class BoiEarlyCleanApprox(Spectrum):
         f_arr = np.atleast_1d(np.asarray(f, dtype=float)).ravel()
         omega_arr = np.atleast_1d(np.asarray(omega, dtype=float)).ravel()
         A = self.amplitudes()
-        durations = main_sequence_duration(A)
-        H = 2.0 * (1.0 - j0(2.0 * np.pi * f_arr[:, None] * A[None, :]))
+        if self.temporal_model in {"mostofi", "analytic"}:
+            return mostofi_saccade_amplitude_average(f_arr, omega_arr, A)
         if self.temporal_model == "fft":
+            durations = main_sequence_duration(A)
+            H = 2.0 * (1.0 - j0(2.0 * np.pi * f_arr[:, None] * A[None, :]))
             E = unit_step_temporal_envelopes(
                 omega_arr, durations,
                 T_win=self.T_win, n_t=self.n_t, n_fft=self.n_fft,
             )
-        elif self.temporal_model == "analytic":
-            E = analytic_transient_envelopes(
-                omega_arr, durations, T_win=self.T_win,
-            )
         else:
-            raise ValueError("temporal_model must be 'analytic' or 'fft'")
+            raise ValueError("temporal_model must be 'mostofi', 'analytic', or 'fft'")
         return (H @ E) / A.size
 
     def C(self, f, omega) -> np.ndarray:
@@ -780,6 +811,10 @@ __all__ = [
     "temporal_lorentzian",
     "temporal_power_law",
     "separable_movie_spectrum",
+    "saccade_main_sequence_duration",
+    "saccade_smoothing_sigma",
+    "mostofi_saccade_redistribution",
+    "mostofi_saccade_amplitude_average",
     "saccade_template",
     "saccade_redistribution",
     "saccade_spectrum",
@@ -793,7 +828,6 @@ __all__ = [
     "LinearMotionSpectrum",
     "SeparableMovieSpectrum",
     "SaccadeSpectrum",
-    "DriftPlusSaccadeSpectrum",
     "BoiCycleEarlySpectrum",
     "BoiCycleLateSpectrum",
     "BoiEarlyCleanApprox",

@@ -1,4 +1,4 @@
-"""Figure 7: trace-based Rucci/Boi cycle spectra.
+"""Figure 7: analytic saccade/fixation-cycle spectra.
 
 This is the operational saccade/fixation-cycle input for the efficient-coding
 solver:
@@ -6,10 +6,8 @@ solver:
     early fixation: C_early(f, omega) = I(f) Q_saccade(f, omega)
     late fixation:  C_late(f, omega)  = I(f) Q_drift(f, omega)
 
-Both Q_saccade and Q_drift are estimated from explicit eye-position traces
-with the same orientation-averaged Fourier-power estimator.  The stationary
-Poisson saccade spectrum remains in src.spectra as an analytic control, but it
-is not used here.
+The cycle is a selector: early fixation uses the Mostofi analytic saccade
+transient and late fixation uses analytic Brownian drift.
 """
 
 from __future__ import annotations
@@ -70,15 +68,17 @@ def fig7():
     omega = cycle.omega
     cycle.save_npz("outputs/rucci_cycle_spectra_demo.npz")
 
-    p_sac = temporal_power_integral(cycle.Q_saccade_total, omega)
+    nonzero = omega != 0.0
+    p_sac = temporal_power_integral(cycle.Q_saccade_total[:, nonzero], omega[nonzero])
     nu_target = 8.0
     i_w = int(np.argmin(np.abs(omega / (2.0 * np.pi) - nu_target)))
-    print("Rucci/Boi trace-cycle diagnostics")
+    print("Analytic cycle diagnostics")
     print(f"  saccade amplitude mean={cycle.saccade_amplitudes_deg.mean():.2f} deg, "
           f"sd={cycle.saccade_amplitudes_deg.std():.2f} deg")
-    print(f"  drift D_eff={cycle.drift_D_eff_deg2_s:.4f} deg^2/s")
+    print(f"  drift D={cycle.drift_D_eff_deg2_s:.4f} deg^2/s")
     print(f"  median integral Q_saccade_total={np.median(p_sac):.3f}")
-    print("  Q_drift_total uses the smooth Brownian displacement-probability limit")
+    print("  Q_saccade uses the Mostofi cumulative-Gaussian step approximation")
+    print("  Q_drift uses the smooth Brownian displacement-probability limit")
     print(f"  C_early_mod slope at {nu_target:g} Hz, 0.05-0.2 cpd: "
           f"{spatial_slope_loglog(f, cycle.C_early_mod[:, i_w], 0.05, 0.2):.2f}")
     print(f"  C_late_total slope at {nu_target:g} Hz, 0.2-5 cpd: "

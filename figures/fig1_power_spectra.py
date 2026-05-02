@@ -2,7 +2,7 @@
 
 Three companion figures:
   1a  main examples: drift sweep over D; saccade sweep over A.
-  1b  Rucci/Boi cycle decomposition: early vs late fixation.
+  1b  analytic cycle selector: early vs late fixation.
   1c  comprehensive library: diffusion, saccades, early/late fixation cycle,
       linear velocity distribution.
 
@@ -178,7 +178,7 @@ def fig1a():
 
 
 def fig1b():
-    """Trace-based Rucci/Boi cycle decomposition: early vs late fixation."""
+    """Analytic cycle selector: early vs late fixation."""
     panels = cycle_decomposition_panels(normalize="panel")
     vmin, vmax = FLOOR, 1.0
 
@@ -198,7 +198,7 @@ def fig1b():
 
     fig.subplots_adjust(left=0.10, right=0.88, top=0.82, bottom=0.16)
     fig.suptitle(
-        r"Figure 1b  Rucci/Boi cycle decomposition $C_\theta(f, \omega)$: "
+        r"Figure 1b  analytic cycle selector $C_\theta(f, \omega)$: "
         r"early vs late fixation",
         y=0.99, fontsize=10.5,
     )

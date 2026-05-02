@@ -1,0 +1,19 @@
+{
+  "outdir": "outputs/cell_classes_noise_sweep",
+  "grid": "fast",
+  "sigma_in_values": "0.2,0.3,0.5,0.7",
+  "sigma_out": 1.0,
+  "P0": 50.0,
+  "kmax": 3,
+  "optimizer": "fast",
+  "steps": 1200,
+  "restarts": 2,
+  "lr": 0.05,
+  "smooth": 0.0,
+  "entropy": 0.0,
+  "device": "auto",
+  "dtype": "float32",
+  "patience": 20,
+  "check_every": 25,
+  "torch_threads": 0
+}

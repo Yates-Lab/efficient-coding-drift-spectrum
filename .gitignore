@@ -1,1 +1,6 @@
 *.pyc
+outputs/cell_classes_movement_sweep_story_K3/*
+outputs/cell_classes_movement_sweep_story_K2/*
+outputs/cell_classes_movement_sweep_story_K1/*
+outputs/hyperparam_checks/*
+*.npz

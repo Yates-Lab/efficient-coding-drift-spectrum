@@ -10,7 +10,7 @@ sys.path.insert(0, ".")
 
 from src.spectra import (
     DriftSpectrum, SaccadeSpectrum, BoiCycleLateSpectrum,
-    BoiCycleEarlySpectrum, DriftPlusSaccadeSpectrum,
+    BoiCycleEarlySpectrum,
 )
 from src.pipeline import (
     SolveConfig,
@@ -62,11 +62,11 @@ def test_run_boi_late_matches_drift():
     np.testing.assert_allclose(r_late.v_sq, r_drift.v_sq, rtol=1e-12)
 
 
-def test_run_drift_plus_saccade_reduces_to_saccade_when_D0():
-    """Cross-check across the pipeline boundary."""
-    r_combined = run(DriftPlusSaccadeSpectrum(D=0.0, A=2.5, lam=3.0), grid="fast")
-    r_sac = run(SaccadeSpectrum(A=2.5, lam=3.0), grid="fast")
-    np.testing.assert_allclose(r_combined.I, r_sac.I, rtol=1e-10)
+def test_run_saccade_mostofi_spectrum_is_finite():
+    """Cross-check the Mostofi saccade approximation across the pipeline boundary."""
+    r_sac = run(SaccadeSpectrum(A=2.5), grid="fast")
+    assert np.isfinite(r_sac.I) and r_sac.I > 0
+    assert np.all(np.isfinite(r_sac.C))
 
 
 def test_run_many_accepts_spectrum_specs():

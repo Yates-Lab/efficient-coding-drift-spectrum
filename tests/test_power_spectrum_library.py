@@ -14,7 +14,6 @@ from src.power_spectrum_library import (
     cycle_decomposition_panels,
     cycle_solver_spectra,
     drift_spectrum_specs,
-    equivalent_saccade_drift_pair_specs,
     get_spectrum_set,
     list_spectrum_sets,
     spectrum_comparison_specs,
@@ -101,12 +100,12 @@ def test_spectrum_comparison_specs_use_shared_cycle_solver_spectra():
     nonzero = cycle.omega != 0.0
 
     np.testing.assert_allclose(
-        by_label["early cycle (Rucci/Boi)"].C(cycle.f, cycle.omega)[:, nonzero],
+        by_label["early cycle (Mostofi saccade)"].C(cycle.f, cycle.omega)[:, nonzero],
         cycle.C_early_mod[:, nonzero],
         rtol=1e-12,
     )
     np.testing.assert_allclose(
-        by_label["late cycle (Rucci/Boi)"].C(cycle.f, cycle.omega)[:, nonzero],
+        by_label["late cycle (drift)"].C(cycle.f, cycle.omega)[:, nonzero],
         cycle.C_late_total[:, nonzero],
         rtol=1e-12,
     )
@@ -132,16 +131,6 @@ def test_spectrum_comparison_spec_objects_match_legacy_tuples():
     assert [s.color for s in objects] == [row[2] for row in tuples]
 
 
-def test_equivalent_saccade_drift_pairs_encode_D_eff():
-    pairs = equivalent_saccade_drift_pair_specs([0.3, 2.5], lam=3.0)
-    for sac, drift in pairs:
-        A = sac.parameters["A"]
-        expected = np.pi ** 2 * 3.0 * A ** 2
-        np.testing.assert_allclose(drift.parameters["D"], expected)
-        assert sac.family == "saccade"
-        assert drift.family == "equivalent_drift"
-
-
 def test_direct_spec_factories_are_plain_to_extend():
     specs = drift_spectrum_specs([1.0])
     assert specs[0].label == r"$D=1$"
@@ -152,6 +141,7 @@ def test_cycle_reconstruction_figures_use_shared_spectrum_entrypoints():
     root = Path(__file__).resolve().parents[1]
     expected = {
         "figures/fig6_saccade_kernels.py": "cycle_solver_spectra",
+        "figures/fig6c_saccade_vs_drift_kernels.py": "saccade_spectrum_specs",
         "figures/figQ3_magno_parvo.py": "cycle_solver_spectra",
         "figures/figQ1_spectrum_library.py": "spectrum_comparison_specs",
     }

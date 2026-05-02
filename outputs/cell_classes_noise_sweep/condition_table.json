@@ -1,0 +1,20 @@
+[
+  {
+    "index": 0,
+    "name": "early_cycle",
+    "epoch": "early",
+    "parameter_name": "cycle_phase",
+    "parameter_value": 0.0,
+    "weight": 0.5,
+    "I_star": 0.3374282614512445
+  },
+  {
+    "index": 1,
+    "name": "late_cycle",
+    "epoch": "late",
+    "parameter_name": "cycle_phase",
+    "parameter_value": 1.0,
+    "weight": 0.5,
+    "I_star": 0.34615195747131866
+  }
+]

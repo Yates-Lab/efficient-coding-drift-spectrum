@@ -2,13 +2,13 @@
   "args": {
     "outdir": "outputs/cell_classes_movement_sweep",
     "grid": "fast",
-    "sigma_in": 0.3,
+    "sigma_in": 0.2,
     "sigma_out": 1.0,
     "P0": 50.0,
     "kmax": 4,
     "condition_set": "movement_sweep",
-    "early_A_values": "1,2,4,6,8",
-    "late_D_values": "0.0375,0.075,0.15,0.3,0.6",
+    "early_A_values": "0.5,1,2,4,7",
+    "late_D_values": "0.075,0.1,0.15,0.3,0.6",
     "early_weight": 0.5,
     "late_weight": 0.5,
     "n_saccades": 32,
@@ -34,175 +34,175 @@
     "share_floor": 0.0,
     "share_floor_weight": 0.0
   },
-  "J_star": 1.5651157372411775,
+  "J_star": 2.9295063576375484,
   "fits": {
     "1": {
-      "J": 1.4795646667480469,
-      "regret": 0.054661178376450986,
+      "J": 2.791031837463379,
+      "regret": 0.047268892184907214,
       "centroids": [
         {
           "class": 0,
-          "f_centroid": 1.7467272228341693,
-          "omega_centroid": 54.165812656852864
+          "f_centroid": 2.2869313148371835,
+          "omega_centroid": 26.757800082866243
         }
       ],
       "summary": [
         {
           "class": 0,
-          "f_centroid": 1.746727222835916,
-          "omega_centroid": 54.16581265690703,
-          "high_f_fraction": 0.711852610504631,
-          "high_omega_fraction": 0.33012978802647414,
+          "f_centroid": 2.28693131483947,
+          "omega_centroid": 26.757800082893002,
+          "high_f_fraction": 0.8612420893170548,
+          "high_omega_fraction": 0.17305918808694837,
           "f_cut": 1.0,
           "omega_cut": 50.0
         }
       ]
     },
     "2": {
-      "J": 1.5354928970336914,
-      "regret": 0.018926932687867618,
+      "J": 2.88067889213562,
+      "regret": 0.01666747210656487,
       "centroids": [
         {
           "class": 0,
-          "f_centroid": 2.4442425247996344,
-          "omega_centroid": 21.01905844361151
+          "f_centroid": 1.8697835032000112,
+          "omega_centroid": 45.378947325021976
         },
         {
           "class": 1,
-          "f_centroid": 1.4601733044498248,
-          "omega_centroid": 76.82952022528114
+          "f_centroid": 2.643359486384713,
+          "omega_centroid": 11.42987686510686
         }
       ],
       "summary": [
         {
           "class": 0,
-          "f_centroid": 2.4442425248020787,
-          "omega_centroid": 21.019058443632527,
-          "high_f_fraction": 0.9125165092116045,
-          "high_omega_fraction": 0.07439491375473134,
+          "f_centroid": 1.8697835032018812,
+          "omega_centroid": 45.37894732506736,
+          "high_f_fraction": 0.855614054072564,
+          "high_omega_fraction": 0.3623846112765167,
           "f_cut": 1.0,
           "omega_cut": 50.0
         },
         {
           "class": 1,
-          "f_centroid": 1.4601733044512852,
-          "omega_centroid": 76.82952022535797,
-          "high_f_fraction": 0.6155922778185773,
-          "high_omega_fraction": 0.47373116265160753,
+          "f_centroid": 2.643359486387357,
+          "omega_centroid": 11.42987686511829,
+          "high_f_fraction": 0.852361029040881,
+          "high_omega_fraction": 0.027319066670385347,
           "f_cut": 1.0,
           "omega_cut": 50.0
         }
       ]
     },
     "3": {
-      "J": 1.554915189743042,
-      "regret": 0.006517439736511717,
+      "J": 2.9211044311523438,
+      "regret": 0.002868034904003503,
       "centroids": [
         {
           "class": 0,
-          "f_centroid": 2.6850654134828846,
-          "omega_centroid": 19.30212439678015
+          "f_centroid": 1.6337669988802799,
+          "omega_centroid": 61.69061389513497
         },
         {
           "class": 1,
-          "f_centroid": 1.5116461380085835,
-          "omega_centroid": 81.55637330142444
+          "f_centroid": 2.5974277666064376,
+          "omega_centroid": 11.637999536402559
         },
         {
           "class": 2,
-          "f_centroid": 1.6392306515139567,
-          "omega_centroid": 50.87364922782832
+          "f_centroid": 2.472644937631929,
+          "omega_centroid": 28.529382649269106
         }
       ],
       "summary": [
         {
           "class": 0,
-          "f_centroid": 2.68506541348557,
-          "omega_centroid": 19.302124396799456,
-          "high_f_fraction": 0.9335031116400716,
-          "high_omega_fraction": 0.041801739482094695,
+          "f_centroid": 1.6337669988819137,
+          "omega_centroid": 61.69061389519666,
+          "high_f_fraction": 0.8030615302193053,
+          "high_omega_fraction": 0.5277354384936174,
           "f_cut": 1.0,
           "omega_cut": 50.0
         },
         {
           "class": 1,
-          "f_centroid": 1.5116461380100952,
-          "omega_centroid": 81.55637330150601,
-          "high_f_fraction": 0.5902728845608679,
-          "high_omega_fraction": 0.4589917957778981,
+          "f_centroid": 2.5974277666090346,
+          "omega_centroid": 11.637999536414195,
+          "high_f_fraction": 0.8336568920888456,
+          "high_omega_fraction": 0.03513253159173164,
           "f_cut": 1.0,
           "omega_cut": 50.0
         },
         {
           "class": 2,
-          "f_centroid": 1.6392306515155963,
-          "omega_centroid": 50.8736492278792,
-          "high_f_fraction": 0.791558217508328,
-          "high_omega_fraction": 0.42954354069863554,
+          "f_centroid": 2.4726449376344015,
+          "omega_centroid": 28.529382649297634,
+          "high_f_fraction": 0.9241195554176611,
+          "high_omega_fraction": 0.15846217778086355,
           "f_cut": 1.0,
           "omega_cut": 50.0
         }
       ]
     },
     "4": {
-      "J": 1.5583159923553467,
-      "regret": 0.004344563615350692,
+      "J": 2.9244728088378906,
+      "regret": 0.0017182242279607152,
       "centroids": [
         {
           "class": 0,
-          "f_centroid": 2.684136740518114,
-          "omega_centroid": 19.343189434147185
+          "f_centroid": 1.6324455369604252,
+          "omega_centroid": 61.8225263045575
         },
         {
           "class": 1,
-          "f_centroid": 1.409749248742832,
-          "omega_centroid": 89.83376210665483
+          "f_centroid": 2.6480055754164127,
+          "omega_centroid": 10.627888063926505
         },
         {
           "class": 2,
-          "f_centroid": 1.6477296690554248,
-          "omega_centroid": 51.06936842572924
+          "f_centroid": 2.468208735192279,
+          "omega_centroid": 28.680003488066994
         },
         {
           "class": 3,
-          "f_centroid": 1.7549561411222114,
-          "omega_centroid": 59.129751610608565
+          "f_centroid": 2.555615648338692,
+          "omega_centroid": 13.461864191036618
         }
       ],
       "summary": [
         {
           "class": 0,
-          "f_centroid": 2.684136740520798,
-          "omega_centroid": 19.34318943416653,
-          "high_f_fraction": 0.9331790097084194,
-          "high_omega_fraction": 0.04190806088781344,
+          "f_centroid": 1.6324455369620576,
+          "omega_centroid": 61.822526304619316,
+          "high_f_fraction": 0.8028717534400978,
+          "high_omega_fraction": 0.5288274196876814,
           "f_cut": 1.0,
           "omega_cut": 50.0
         },
         {
           "class": 1,
-          "f_centroid": 1.4097492487442418,
-          "omega_centroid": 89.83376210674469,
-          "high_f_fraction": 0.5591107375438084,
-          "high_omega_fraction": 0.5005516842539062,
+          "f_centroid": 2.648005575419061,
+          "omega_centroid": 10.627888063937132,
+          "high_f_fraction": 0.856574662555516,
+          "high_omega_fraction": 0.020711452774671645,
           "f_cut": 1.0,
           "omega_cut": 50.0
         },
         {
           "class": 2,
-          "f_centroid": 1.6477296690570726,
-          "omega_centroid": 51.06936842578031,
-          "high_f_fraction": 0.7953408972389774,
-          "high_omega_fraction": 0.4336623571040638,
+          "f_centroid": 2.4682087351947466,
+          "omega_centroid": 28.68000348809567,
+          "high_f_fraction": 0.9233609917246961,
+          "high_omega_fraction": 0.16020894296887842,
           "f_cut": 1.0,
           "omega_cut": 50.0
         },
         {
           "class": 3,
-          "f_centroid": 1.7549561411239663,
-          "omega_centroid": 59.12975161066769,
-          "high_f_fraction": 0.6853951154823162,
-          "high_omega_fraction": 0.36023459328286506,
+          "f_centroid": 2.5556156483412478,
+          "omega_centroid": 13.46186419105008,
+          "high_f_fraction": 0.8170963023530109,
+          "high_omega_fraction": 0.05034963787856985,
           "f_cut": 1.0,
           "omega_cut": 50.0
         }

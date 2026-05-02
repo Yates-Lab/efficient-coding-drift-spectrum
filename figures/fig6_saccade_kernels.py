@@ -1,12 +1,9 @@
-"""Figure 6: optimal kernels under the Rucci/Boi fixation-cycle spectra.
+"""Figure 6: optimal kernels under the analytic fixation-cycle spectra.
 
 This figure uses the same operational spectra shown in Figure 7:
 
-    early fixation: C_early = I(f) Q_saccade_mod
+    early fixation: C_early = I(f) Q_saccade
     late fixation:  C_late  = I(f) Q_drift_total
-
-The older stationary Poisson saccade spectrum remains available as an
-analytic control, but it is not used here.
 """
 
 from __future__ import annotations
@@ -53,7 +50,7 @@ def fig6():
 
     palette = parameter_palette(len(sigma_in_sweep), cmap="plasma")
 
-    print("Solving Rucci/Boi cycle kernels across sigma_in...")
+    print("Solving analytic cycle kernels across sigma_in...")
     for sin, color in zip(sigma_in_sweep, palette):
         r_early = run(
             early_spec, sigma_in=sin, sigma_out=sigma_out, P0=P0,
@@ -101,7 +98,7 @@ def fig6():
     ax_t_late.set_title("Late fixation: temporal kernel")
 
     fig.suptitle(
-        "Optimal filters under Rucci/Boi cycle spectra "
+        "Optimal filters under analytic cycle spectra "
         r"($C_\mathrm{early}=I Q_\mathrm{saccade}$, "
         r"$C_\mathrm{late}=I Q_\mathrm{drift}$)",
         y=0.98, fontsize=10.5,

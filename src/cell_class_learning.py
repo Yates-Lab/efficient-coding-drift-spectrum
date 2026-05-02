@@ -40,14 +40,10 @@ from src.plotting import radial_weights, band_mask_radial
 from src.power_spectrum_library import cycle_solver_spectra
 from src.rucci_cycle_spectra import (
     ArraySpectrum,
-    EstimatorParams,
     ImageParams as RucciImageParams,
-    SaccadeTraceParams,
-    estimate_Q_from_traces,
     image_spectrum as rucci_image_spectrum,
-    make_saccade_traces,
 )
-from src.spectra import BoiLateDriftApprox
+from src.spectra import BoiLateDriftApprox, mostofi_saccade_redistribution
 
 
 Array = np.ndarray
@@ -191,7 +187,7 @@ def build_rucci_cycle_conditions(
 ) -> Tuple[List[Condition], Array]:
     """Create the production early/late stack from the canonical Figure 7 spectra.
 
-    This is the cell-learning source of truth for the Rucci/Boi fixation-cycle
+    This is the cell-learning source of truth for the analytic fixation-cycle
     question. It uses the same `C_early = I(f) Q_saccade` and
     `C_late = I(f) Q_drift` ArraySpectrum wrappers that feed the Figure 6/Q1/Q3
     filter reconstructions.
@@ -225,7 +221,7 @@ def build_cell_learning_conditions(
     early_weight: float = 0.5,
     late_weight: float = 0.5,
 ) -> Tuple[List[Condition], Array]:
-    """Build the canonical Figure 7 Rucci/Boi condition stack."""
+    """Build the canonical Figure 7 analytic condition stack."""
     return build_rucci_cycle_conditions(
         early_weight=early_weight,
         late_weight=late_weight,
@@ -250,43 +246,19 @@ def _fixed_amplitude_saccade_spectrum(
     T_win_s: float,
     seed: int,
 ) -> ArraySpectrum:
-    """Build one early-fixation fixed-amplitude saccade spectrum.
+    """Build one early-fixation fixed-amplitude Mostofi saccade spectrum.
 
     The spectrum is precomputed on the requested solver grid and wrapped as an
-    ``ArraySpectrum`` so the optimizer does not regenerate trace periodograms
+    ``ArraySpectrum`` so the optimizer does not regenerate analytic spectra
     during every oracle solve.
     """
     f, omega = _condition_grid(grid)
     image_params = RucciImageParams(beta=2.0, f0=0.03, high_cut_cpd=60.0)
-    saccade_params = SaccadeTraceParams(
-        n_saccades=int(n_saccades),
-        amplitude_mode="fixed",
-        fixed_A_deg=float(A),
-        T_win_s=float(T_win_s),
-        dt_s=0.001,
-        seed=int(seed),
-        random_directions=True,
-    )
-    estimator_params = EstimatorParams(
-        n_orientations=int(n_orientations),
-        n_fft=2048,
-        use_fft=True,
-        window="rect",
-        smooth_sigma_omega_bins=2.5,
-    )
-    traces, t, _ = make_saccade_traces(saccade_params)
-    Q = estimate_Q_from_traces(
-        f,
-        omega,
-        traces,
-        t,
-        params=estimator_params,
-        subtract_temporal_mean=True,
-    )
+    Q = mostofi_saccade_redistribution(f, omega, A=float(A))
     C = rucci_image_spectrum(f, image_params)[:, None] * Q
     label = (
-        f"Rucci/Boi early fixed-amplitude saccade "
-        f"(A={float(A):g} deg, T={float(T_win_s):g} s)"
+        f"Mostofi early fixed-amplitude saccade "
+        f"(A={float(A):g} deg)"
     )
     return ArraySpectrum(f, omega, C, label, ignore_dc_for_interp=True)
 
@@ -306,7 +278,7 @@ def build_named_cell_learning_conditions(
 ) -> Tuple[List[Condition], Array]:
     """Build named condition stacks for cell-class learning scripts.
 
-    ``cycle_pair`` is the canonical two-condition Rucci/Boi split.  The
+    ``cycle_pair`` is the canonical two-condition analytic selector.  The
     ``movement_sweep`` stack is the nontrivial class-learning experiment: five
     early fixed-amplitude saccade spectra plus five late Brownian-drift spectra
     using the cycles-aware width ``D * (2*pi*f)^2``.

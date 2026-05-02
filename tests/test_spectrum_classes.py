@@ -2,10 +2,7 @@
 drift-plus-saccade and Boi-cycle spectra.
 
 Covers:
-- Class-API equivalence to free functions (drift, saccade, linear motion)
-- DriftPlusSaccadeSpectrum reductions (D=0 -> saccade, lam=0 -> drift)
-- DriftPlusSaccadeSpectrum power-preserving normalization
-- DriftPlusSaccadeSpectrum drift-equivalent in small-kA limit
+- Class-API equivalence to free functions (drift, Mostofi saccade, linear motion)
 - BoiCycleLateSpectrum equivalence to DriftSpectrum
 - BoiCycleEarlySpectrum sanity (non-negative, finite, saturated at high f)
 - Spectrum.describe() returns a sensible parameter summary
@@ -25,7 +22,6 @@ from src.spectra import (
     DriftSpectrum,
     SaccadeSpectrum,
     LinearMotionSpectrum,
-    DriftPlusSaccadeSpectrum,
     BoiCycleEarlySpectrum,
     BoiCycleLateSpectrum,
     image_spectrum,
@@ -93,93 +89,6 @@ def test_custom_image_params_threaded_through():
     expected = drift_spectrum(f[:, None], omega[None, :],
                               D=1.0, beta=2.5, A=2.0, k0=0.1)
     np.testing.assert_allclose(s.C(f, omega), expected, rtol=1e-12)
-
-
-# ---------------------------------------------------------------------------
-# DriftPlusSaccadeSpectrum reductions
-# ---------------------------------------------------------------------------
-
-def test_drift_plus_saccade_reduces_to_drift_when_lam_zero():
-    """lam = 0 cancels the saccade contribution in alpha_tot."""
-    f = np.geomspace(0.05, 5.0, 50)
-    omega = np.linspace(-100, 100, 401)
-    s_combined = DriftPlusSaccadeSpectrum(D=2.0, A=3.0, lam=0.0)
-    s_drift = DriftSpectrum(D=2.0)
-    np.testing.assert_allclose(
-        s_combined.C(f, omega), s_drift.C(f, omega), rtol=1e-12
-    )
-
-
-def test_drift_plus_saccade_reduces_to_drift_when_A_zero():
-    """A = 0 makes 1 - J_0 vanish identically."""
-    f = np.geomspace(0.05, 5.0, 50)
-    omega = np.linspace(-100, 100, 401)
-    s_combined = DriftPlusSaccadeSpectrum(D=2.0, A=0.0, lam=5.0)
-    s_drift = DriftSpectrum(D=2.0)
-    np.testing.assert_allclose(
-        s_combined.C(f, omega), s_drift.C(f, omega), rtol=1e-12
-    )
-
-
-def test_drift_plus_saccade_reduces_to_saccade_when_D_zero():
-    """D = 0 leaves only the J_0 piece — equals SaccadeSpectrum."""
-    f = np.geomspace(0.05, 5.0, 50)
-    omega = np.linspace(-100, 100, 401)
-    s_combined = DriftPlusSaccadeSpectrum(D=0.0, A=2.5, lam=3.0)
-    s_sac = SaccadeSpectrum(A=2.5, lam=3.0)
-    np.testing.assert_allclose(
-        s_combined.C(f, omega), s_sac.C(f, omega), rtol=1e-12
-    )
-
-
-def test_drift_plus_saccade_alpha_is_sum():
-    """alpha_tot(f) = D f^2 + lam (1 - J_0(2π f A)) — verify directly."""
-    from scipy.special import j0
-    f = np.geomspace(0.05, 5.0, 50)
-    s = DriftPlusSaccadeSpectrum(D=1.5, A=2.5, lam=4.0)
-    expected = 1.5 * f ** 2 + 4.0 * (1.0 - j0(2.0 * np.pi * f * 2.5))
-    np.testing.assert_allclose(s.alpha_tot(f), expected, rtol=1e-12)
-
-
-def test_drift_plus_saccade_lorentzian_normalization():
-    """For each f, ∫ Q dω/(2π) = 1 (Lorentzian normalization)."""
-    f = np.array([0.05, 0.1, 0.3, 1.0])
-    # Need wide ω grid: tail decays as 1/ω^2.
-    omega = np.linspace(-10000, 10000, 200001)
-    s = DriftPlusSaccadeSpectrum(D=2.0, A=2.5, lam=3.0)
-    Q = s.redistribution(f, omega)
-    integral = np.trapz(Q, omega, axis=1) / (2 * np.pi)
-    np.testing.assert_allclose(integral, 1.0, rtol=2e-3)
-
-
-def test_drift_plus_saccade_power_preserving():
-    """∫ dω/(2π) C_total(f, ω) = C_I(f)."""
-    f_vals = np.array([0.3, 1.0, 2.5])
-    s_full = DriftPlusSaccadeSpectrum(D=1.0, A=2.5, lam=3.0)
-    for f in f_vals:
-        a = s_full.alpha_tot(np.array([f]))[0]  # scalar
-        omega_max = 500.0 * a
-        omega = np.linspace(-omega_max, omega_max, 200001)
-        C = s_full.C(np.array([f]), omega)[0]
-        integral = np.trapz(C, omega) / (2.0 * np.pi)
-        CI = image_spectrum(np.array([f]))[0]
-        np.testing.assert_allclose(integral, CI, rtol=5e-3)
-
-
-def test_drift_plus_saccade_at_small_kA_matches_drift_with_summed_D():
-    """At small kA, alpha_tot ≈ (D + π² λ A²) k², so Q matches a pure
-    drift Lorentzian with effective diffusion D + D_eff."""
-    f = np.geomspace(0.001, 0.01, 5)
-    omega = np.linspace(-50, 50, 401)
-    D = 2.0
-    A = 1.0
-    lam = 5.0
-    D_eff = np.pi ** 2 * lam * A ** 2
-    s_combined = DriftPlusSaccadeSpectrum(D=D, A=A, lam=lam)
-    s_equiv = DriftSpectrum(D=D + D_eff)
-    Q1 = s_combined.redistribution(f, omega)
-    Q2 = s_equiv.redistribution(f, omega)
-    np.testing.assert_allclose(Q1, Q2, rtol=0.01)
 
 
 # ---------------------------------------------------------------------------
@@ -263,13 +172,6 @@ def test_describe_excludes_image_params():
     assert "D=2.0" in desc
     assert "ImageParams" not in desc
     assert "beta" not in desc
-
-
-def test_describe_drift_plus_saccade_full():
-    s = DriftPlusSaccadeSpectrum(D=1.5, A=2.5, lam=3.0)
-    desc = s.describe()
-    for token in ["D=1.5", "A=2.5", "lam=3.0"]:
-        assert token in desc
 
 
 # ---------------------------------------------------------------------------

@@ -1,8 +1,8 @@
-"""Q3: Magno/parvo-like kernels from Rucci/Boi cycle spectra.
+"""Q3: Magno/parvo-like kernels from analytic cycle spectra.
 
-This figure uses the exact same canonical trace-based spectra as Figure 7:
+This figure uses the exact same canonical analytic spectra as Figure 7:
 
-    early fixation: C_early = I(f) Q_saccade_mod
+    early fixation: C_early = I(f) Q_saccade
     late fixation:  C_late  = I(f) Q_drift_total
 
 The sweep varies encoder input noise only.  The movement spectrum itself is
@@ -70,7 +70,7 @@ def fig_q3():
                                       lo=0.35, hi=0.95)
 
     results_late = []
-    print("Late regime (canonical Figure 7 Rucci/Boi drift spectrum):")
+    print("Late regime (canonical Figure 7 drift spectrum):")
     for sigma_in, color in zip(sigma_in_sweep, palette_late):
         r, c = _run_regime(
             early, late, regime="late",
@@ -81,7 +81,7 @@ def fig_q3():
               f"f_peak={r.f_peak:.3f}  f_temporal={c:.1f} Hz")
 
     results_early = []
-    print("Early regime (canonical Figure 7 Rucci/Boi saccade spectrum):")
+    print("Early regime (canonical Figure 7 Mostofi saccade spectrum):")
     for sigma_in, color in zip(sigma_in_sweep, palette_early):
         r, c = _run_regime(
             early, late, regime="early",

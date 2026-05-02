@@ -190,9 +190,11 @@ figures/figQ3_magno_parvo.py
 The canonical early/late fixation-cycle spectra are generated once by
 `make_figure7_rucci_cycle_spectra()` and reused through
 `src.power_spectrum_library`. Use `cycle_solver_spectra()` for solver inputs
-and `cycle_decomposition_panels()` / `spectrum_library_panels()` for display
-panels. This keeps Figures 1, 6, 7, Q1, Q3, and the cell-class condition stack
-tied to the same cycle object.
+and `cycle_decomposition_panels()` for display panels. This keeps the cycle
+figures and the cell-class condition stack tied to the same cycle object.
+`spectrum_library_panels()` is the separate Figure 1c collection: Brownian
+drift (`D=1`), saccade (`A=3`), Dong-Atick separable approximation, and
+Dong-Atick linear velocity spread.
 
 ## Common Workflows
 

@@ -375,16 +375,16 @@ def cycle_decomposition_panels(*, normalize: str = "panel"):
 
 
 def spectrum_library_panels(*, normalize: str = "panel"):
-    """Return the shared Figure 1c spectrum library on the Figure 7 grid."""
-    cycle, f, omega, temporal_hz = canonical_positive_cycle_view()
-    pos = cycle.omega > 0
-    drift_D = 2.0
-    saccade_A = 2.5
+    """Return the shared Figure 1c spectrum library on a common positive-Hz grid."""
+    _, f, omega, temporal_hz = canonical_positive_cycle_view()
+    drift_D = 1.0
+    saccade_A = 3.0
     linear_s = 1.0
+    separable_omega0 = DEFAULT_SEPARABLE_OMEGA0
     panels = [
         SpectrumPanel(
-            "diffusion",
-            "Diffusion",
+            "brownian_drift_D_1",
+            "Brownian drift\n($D = 1$)",
             f,
             omega,
             temporal_hz,
@@ -393,34 +393,24 @@ def spectrum_library_panels(*, normalize: str = "panel"):
             overlay_param=drift_D,
         ),
         SpectrumPanel(
-            "saccades",
-            "Mostofi saccade",
+            "saccade_A_3",
+            "Saccade\n($A = 3$)",
             f,
             omega,
             temporal_hz,
             SaccadeSpectrum(A=saccade_A).C(f, omega),
         ),
         SpectrumPanel(
-            "cycle_early",
-            "Early fixation cycle",
+            "dong_atick_separable",
+            "Separable approximation\n(Dong and Atick separable)",
             f,
             omega,
             temporal_hz,
-            cycle.C_early_mod[:, pos],
+            SeparableMovieSpectrum(omega0=separable_omega0).C(f, omega),
         ),
         SpectrumPanel(
-            "cycle_late",
-            "Late fixation cycle",
-            f,
-            omega,
-            temporal_hz,
-            cycle.C_late_total[:, pos],
-            overlay_kind="drift_cycles_hz",
-            overlay_param=cycle.drift_D_eff_deg2_s,
-        ),
-        SpectrumPanel(
-            "linear",
-            "Linear velocity distribution",
+            "dong_atick_linear",
+            "Linear velocity spread\n(Dong and Atick linear)",
             f,
             omega,
             temporal_hz,

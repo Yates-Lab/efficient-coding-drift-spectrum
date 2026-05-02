@@ -3,8 +3,8 @@
 Three companion figures:
   1a  main examples: drift sweep over D; saccade sweep over A.
   1b  analytic cycle selector: early vs late fixation.
-  1c  comprehensive library: diffusion, saccades, early/late fixation cycle,
-      linear velocity distribution.
+  1c  spectrum library: Brownian drift, saccade, Dong-Atick separable
+      approximation, and Dong-Atick linear velocity spread.
 
 Every panel is a log-log contourf of C_theta(f, omega) on
 f in [0.1, 4] cycles/unit and omega in [0.5, 400] rad/s. White overlays
@@ -215,12 +215,12 @@ def fig1b():
 
 
 def fig1c():
-    """Comprehensive library: diffusion, saccades, early/late fixation, linear velocity."""
+    """Spectrum library: drift, saccade, separable approximation, linear velocity."""
     panels = spectrum_library_panels(normalize="panel")
     vmin, vmax = FLOOR, 1.0
 
     fig, axes = plt.subplots(
-        1, 5, figsize=(12.5, 3.1), sharex=True, sharey=True,
+        1, 4, figsize=(10.2, 3.1), sharex=True, sharey=True,
         gridspec_kw={"wspace": 0.20},
     )
 

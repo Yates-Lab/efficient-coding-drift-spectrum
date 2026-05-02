@@ -43,20 +43,16 @@ def test_cycle_decomposition_panels_are_figure7_arrays():
     np.testing.assert_allclose(late.f, cycle.f)
 
 
-def test_spectrum_library_reuses_cycle_decomposition_arrays():
-    cycle_panels = cycle_decomposition_panels(normalize="none")
+def test_spectrum_library_has_requested_four_panel_collection():
     library_panels = spectrum_library_panels(normalize="none")
 
-    np.testing.assert_allclose(
-        _panel_by_key(library_panels, "cycle_early").C,
-        _panel_by_key(cycle_panels, "cycle_early").C,
-        rtol=1e-12,
-    )
-    np.testing.assert_allclose(
-        _panel_by_key(library_panels, "cycle_late").C,
-        _panel_by_key(cycle_panels, "cycle_late").C,
-        rtol=1e-12,
-    )
+    assert [p.key for p in library_panels] == [
+        "brownian_drift_D_1",
+        "saccade_A_3",
+        "dong_atick_separable",
+        "dong_atick_linear",
+    ]
+    assert len(library_panels) == 4
 
 
 def test_all_library_panels_share_grid_and_normalize_per_panel():

@@ -92,10 +92,9 @@ def log_additive_separability_r2(
     if support.sum() < 4:
         return np.nan
 
-    zmax = np.nanmax(Z[support])
-    floor = max(float(floor_rel) * zmax, 1e-300)
-    L = np.log(np.maximum(Z, floor))
     W0 = np.where(support, W, 0.0)
+    L = np.zeros_like(Z, dtype=float)
+    L[support] = np.log(Z[support])
 
     grand = _weighted_mean(L, W0)
     row = _weighted_mean(L, W0, axis=1, keepdims=True)

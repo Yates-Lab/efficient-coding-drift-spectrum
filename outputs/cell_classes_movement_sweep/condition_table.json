@@ -1,0 +1,92 @@
+[
+  {
+    "index": 0,
+    "name": "early_A_1",
+    "epoch": "early",
+    "parameter_name": "A",
+    "parameter_value": 1.0,
+    "weight": 0.1,
+    "I_star": 1.4055147116444813
+  },
+  {
+    "index": 1,
+    "name": "early_A_2",
+    "epoch": "early",
+    "parameter_name": "A",
+    "parameter_value": 2.0,
+    "weight": 0.1,
+    "I_star": 1.5046213285477217
+  },
+  {
+    "index": 2,
+    "name": "early_A_4",
+    "epoch": "early",
+    "parameter_name": "A",
+    "parameter_value": 4.0,
+    "weight": 0.1,
+    "I_star": 1.547919538416778
+  },
+  {
+    "index": 3,
+    "name": "early_A_6",
+    "epoch": "early",
+    "parameter_name": "A",
+    "parameter_value": 6.0,
+    "weight": 0.1,
+    "I_star": 1.5663236958460705
+  },
+  {
+    "index": 4,
+    "name": "early_A_8",
+    "epoch": "early",
+    "parameter_name": "A",
+    "parameter_value": 8.0,
+    "weight": 0.1,
+    "I_star": 1.571329456845498
+  },
+  {
+    "index": 5,
+    "name": "late_D_0.0375",
+    "epoch": "late",
+    "parameter_name": "D",
+    "parameter_value": 0.0375,
+    "weight": 0.1,
+    "I_star": 1.5640964364054404
+  },
+  {
+    "index": 6,
+    "name": "late_D_0.075",
+    "epoch": "late",
+    "parameter_name": "D",
+    "parameter_value": 0.075,
+    "weight": 0.1,
+    "I_star": 1.6011628900157362
+  },
+  {
+    "index": 7,
+    "name": "late_D_0.15",
+    "epoch": "late",
+    "parameter_name": "D",
+    "parameter_value": 0.15,
+    "weight": 0.1,
+    "I_star": 1.6198346748800878
+  },
+  {
+    "index": 8,
+    "name": "late_D_0.3",
+    "epoch": "late",
+    "parameter_name": "D",
+    "parameter_value": 0.3,
+    "weight": 0.1,
+    "I_star": 1.6317106842147697
+  },
+  {
+    "index": 9,
+    "name": "late_D_0.6",
+    "epoch": "late",
+    "parameter_name": "D",
+    "parameter_value": 0.6,
+    "weight": 0.1,
+    "I_star": 1.6386439555951915
+  }
+]

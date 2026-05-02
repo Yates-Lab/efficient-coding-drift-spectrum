@@ -100,6 +100,74 @@ def linear_motion_spectrum_gaussian(f, omega, s, beta=2.0, A=1.0, k0=0.05,
 
 
 # ---------------------------------------------------------------------------
+# Stationary separable movie approximation
+# ---------------------------------------------------------------------------
+
+def temporal_lorentzian(omega, omega0=10.0):
+    """Normalized temporal 1/omega^2-tail spectrum.
+
+    Q_T(omega) = 2 omega0 / (omega0^2 + omega^2)
+
+    integrates to one over d omega / (2*pi). Multiplying by the static image
+    spectrum gives the deliberately separable stationary control
+
+        C_sep(f, omega) = C_I(f) Q_T(omega).
+
+    This is the clean control for the older approximation that treats natural
+    movies as having independent spatial and temporal power-law factors. It is
+    not intended as a faithful eye-movement spectrum.
+    """
+    omega = np.asarray(omega, dtype=float)
+    omega0 = float(omega0)
+    if omega0 <= 0:
+        raise ValueError("omega0 must be positive")
+    return 2.0 * omega0 / (omega0 ** 2 + omega ** 2)
+
+
+def temporal_power_law(omega, omega0=0.05, gamma=2.0):
+    """Regularized temporal power law for passive natural-movie controls.
+
+    The paper-style stationary movie approximation is proportional to
+    ``1 / |omega|^gamma``.  ``omega0`` is only a low-frequency numerical floor
+    to avoid the singularity at zero; choose it below the represented temporal
+    band when the plotted/fit spectrum should look like a pure power law.
+    """
+    omega = np.asarray(omega, dtype=float)
+    omega0 = float(omega0)
+    gamma = float(gamma)
+    if omega0 <= 0:
+        raise ValueError("omega0 must be positive")
+    if gamma <= 0:
+        raise ValueError("gamma must be positive")
+    return 1.0 / np.maximum(np.abs(omega), omega0) ** gamma
+
+
+def separable_movie_spectrum(
+    f,
+    omega,
+    omega0=0.05,
+    beta=2.0,
+    A=1.0,
+    k0=0.05,
+    temporal_beta=2.0,
+):
+    """Stationary separable natural-movie power-law spectrum.
+
+    Implements the passive natural-movie approximation
+
+        S(k, omega) proportional to 1 / (|k|^beta |omega|^temporal_beta).
+
+    ``k0`` and ``omega0`` are low-frequency floors for numerical stability,
+    not scale parameters of the represented spectrum.  Set them below the
+    analysis band to recover straight diagonal log-log contours.
+    """
+    f = np.asarray(f, dtype=float)
+    spatial = A / np.maximum(np.abs(f), float(k0)) ** float(beta)
+    temporal = temporal_power_law(omega, omega0=omega0, gamma=temporal_beta)
+    return spatial * temporal
+
+
+# ---------------------------------------------------------------------------
 # Saccades (free functions)
 # ---------------------------------------------------------------------------
 
@@ -316,6 +384,49 @@ class LinearMotionSpectrum(Spectrum):
         return linear_motion_spectrum_gaussian(
             f_arr[:, None], omega_arr[None, :], s=self.s,
             beta=self.image.beta, A=self.image.A_image, k0=self.image.k0,
+        )
+
+
+@dataclass(frozen=True)
+class SeparableMovieSpectrum(Spectrum):
+    """Stationary separable natural-movie approximation.
+
+    This is the explicit control for the approximation used by passive-movie
+    efficient-coding models that factor the spectrum into independent spatial
+    and temporal power laws:
+
+        C_sep(f, omega) = C_I(f) Q_T(omega).
+
+    This follows the paper-style power law S(k, omega) proportional to
+    1/(|k|^2 |omega|^2).  The low-frequency floors are numerical cutoffs for
+    the singularity, not fitted scales.
+    """
+    omega0: float = 0.05
+    temporal_beta: float = 2.0
+    image: ImageParams = DEFAULT_IMAGE
+
+    def __post_init__(self):
+        object.__setattr__(self, "name", "separable_movie")
+        object.__setattr__(self, "reference", "stationary separable movie control")
+
+    def temporal_factor(self, omega) -> np.ndarray:
+        omega_arr = np.atleast_1d(np.asarray(omega, dtype=float)).ravel()
+        return temporal_power_law(
+            omega_arr,
+            omega0=self.omega0,
+            gamma=self.temporal_beta,
+        )
+
+    def C(self, f, omega) -> np.ndarray:
+        f_arr = np.atleast_1d(np.asarray(f, dtype=float)).ravel()
+        return separable_movie_spectrum(
+            f_arr[:, None],
+            np.atleast_1d(np.asarray(omega, dtype=float)).ravel()[None, :],
+            omega0=self.omega0,
+            beta=self.image.beta,
+            A=self.image.A_image,
+            k0=self.image.k0,
+            temporal_beta=self.temporal_beta,
         )
 
 
@@ -666,6 +777,9 @@ __all__ = [
     "drift_lorentzian",
     "drift_spectrum",
     "linear_motion_spectrum_gaussian",
+    "temporal_lorentzian",
+    "temporal_power_law",
+    "separable_movie_spectrum",
     "saccade_template",
     "saccade_redistribution",
     "saccade_spectrum",
@@ -677,6 +791,7 @@ __all__ = [
     "StaticImageSpectrum",
     "DriftSpectrum",
     "LinearMotionSpectrum",
+    "SeparableMovieSpectrum",
     "SaccadeSpectrum",
     "DriftPlusSaccadeSpectrum",
     "BoiCycleEarlySpectrum",

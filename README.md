@@ -304,3 +304,44 @@ python scripts/run_cell_class_noise_sweep.py \
 ```
 
 For a slower optimizer comparison, add `--optimizer reference`.
+
+
+## Extra calls
+
+```
+python scripts/run_spectrum_audit.py \
+  --outdir outputs/spectrum_audit
+```
+
+```
+python scripts/make_stationary_vs_active_story.py \
+  --grid fast \
+  --no-kernels \
+  --outdir outputs/stationary_vs_active_story
+```
+
+```
+python scripts/run_cell_class_learning.py \
+  --condition-set movement_sweep \
+  --grid fast \
+  --kmax 4 \
+  --steps 1600 \
+  --restarts 2 \
+  --n-saccades 32 \
+  --n-orientations 12 \
+  --torch-threads 1 \
+  --outdir outputs/cell_classes_movement_sweep
+```
+
+```
+python scripts/run_cell_class_learning.py \
+  --condition-set movement_sweep \
+  --grid fast \
+  --kmax 3 \
+  --steps 300 \
+  --restarts 1 \
+  --n-saccades 4 \
+  --n-orientations 4 \
+  --torch-threads 1 \
+  --outdir outputs/cell_classes_movement_sweep_smoke
+```

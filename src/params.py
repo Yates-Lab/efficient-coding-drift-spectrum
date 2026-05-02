@@ -15,7 +15,7 @@ from __future__ import annotations
 import numpy as np
 
 
-F_MAX = 4.0
+F_MAX = 6.0
 OMEGA_MIN = 0.5
 OMEGA_MAX = 400.0
 

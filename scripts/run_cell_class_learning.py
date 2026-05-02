@@ -26,6 +26,7 @@ sys.path.insert(0, ".")
 
 from src.cell_class_learning import (  # noqa: E402
     build_cell_learning_conditions,
+    build_named_cell_learning_conditions,
     class_budget_shares,
     class_centroids,
     class_summary_table,
@@ -119,6 +120,10 @@ def save_budget_share_plot(oracle, fit, sigma_in: float, outdir: Path):
     plt.close(fig)
 
 
+def _parse_float_list(text: str):
+    return tuple(float(x) for x in str(text).split(",") if str(x).strip())
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--outdir", type=str, default="outputs/cell_classes")
@@ -127,6 +132,18 @@ def main():
     parser.add_argument("--sigma-out", type=float, default=1.0)
     parser.add_argument("--P0", type=float, default=50.0)
     parser.add_argument("--kmax", type=int, default=4)
+    parser.add_argument("--condition-set", type=str, default="cycle_pair",
+                        choices=("cycle_pair", "movement_sweep"),
+                        help="cycle_pair is the canonical early/late pair; movement_sweep is 5 saccades + 5 drifts")
+    parser.add_argument("--early-A-values", type=str, default="1,2,4,6,8",
+                        help="comma-separated saccade amplitudes for movement_sweep")
+    parser.add_argument("--late-D-values", type=str, default="0.0375,0.075,0.15,0.3,0.6",
+                        help="comma-separated cycles-aware drift D values for movement_sweep")
+    parser.add_argument("--early-weight", type=float, default=0.5)
+    parser.add_argument("--late-weight", type=float, default=0.5)
+    parser.add_argument("--n-saccades", type=int, default=32)
+    parser.add_argument("--n-orientations", type=int, default=12)
+    parser.add_argument("--saccade-window", type=float, default=0.150)
     parser.add_argument("--optimizer", type=str, default="fast",
                         choices=("fast", "reference"),
                         help="fast is the production default; reference is the original optimizer")
@@ -143,8 +160,8 @@ def main():
                         help="fast optimizer early-stopping patience")
     parser.add_argument("--check-every", type=int, default=25,
                         help="fast optimizer early-stopping check interval")
-    parser.add_argument("--torch-threads", type=int, default=0,
-                        help="set PyTorch CPU thread count for the fast optimizer; 0 leaves default")
+    parser.add_argument("--torch-threads", type=int, default=1,
+                        help="set PyTorch CPU thread count for the fast optimizer; 1 is usually fastest/stablest on laptops; 0 leaves default")
     args = parser.parse_args()
 
     if args.optimizer == "fast":
@@ -174,8 +191,26 @@ def main():
     outdir = Path(args.outdir)
     outdir.mkdir(parents=True, exist_ok=True)
 
-    print("Building movement conditions (canonical Figure 7 Rucci/Boi cycle)...")
-    conditions, pi = build_cell_learning_conditions()
+    print(f"Building movement conditions ({args.condition_set})...")
+    if args.condition_set == "movement_sweep":
+        conditions, pi = build_named_cell_learning_conditions(
+            "movement_sweep",
+            grid=args.grid,
+            early_A_values=_parse_float_list(args.early_A_values),
+            late_D_values=_parse_float_list(args.late_D_values),
+            early_weight=args.early_weight,
+            late_weight=args.late_weight,
+            saccade_n_saccades=args.n_saccades,
+            saccade_n_orientations=args.n_orientations,
+            saccade_T_win_s=args.saccade_window,
+        )
+    else:
+        conditions, pi = build_named_cell_learning_conditions(
+            "cycle_pair",
+            early_weight=args.early_weight,
+            late_weight=args.late_weight,
+            use_modulated_early=True,
+        )
 
     print("Solving one-filter oracle stack...")
     oracle = solve_oracle_stack(

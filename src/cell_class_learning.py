@@ -34,10 +34,20 @@ from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 import numpy as np
 
-from src.params import F_MAX, OMEGA_MIN, OMEGA_MAX
+from src.params import F_MAX, OMEGA_MIN, OMEGA_MAX, fast_grid, hi_res_grid
 from src.pipeline import Result, run
 from src.plotting import radial_weights, band_mask_radial
 from src.power_spectrum_library import cycle_solver_spectra
+from src.rucci_cycle_spectra import (
+    ArraySpectrum,
+    EstimatorParams,
+    ImageParams as RucciImageParams,
+    SaccadeTraceParams,
+    estimate_Q_from_traces,
+    image_spectrum as rucci_image_spectrum,
+    make_saccade_traces,
+)
+from src.spectra import BoiLateDriftApprox
 
 
 Array = np.ndarray
@@ -221,6 +231,144 @@ def build_cell_learning_conditions(
         late_weight=late_weight,
         use_modulated_early=True,
     )
+
+
+def _condition_grid(grid: str) -> Tuple[Array, Array]:
+    if grid == "fast":
+        return fast_grid()
+    if grid == "hi_res":
+        return hi_res_grid()
+    raise ValueError("grid must be 'fast' or 'hi_res'")
+
+
+def _fixed_amplitude_saccade_spectrum(
+    A: float,
+    *,
+    grid: str,
+    n_saccades: int,
+    n_orientations: int,
+    T_win_s: float,
+    seed: int,
+) -> ArraySpectrum:
+    """Build one early-fixation fixed-amplitude saccade spectrum.
+
+    The spectrum is precomputed on the requested solver grid and wrapped as an
+    ``ArraySpectrum`` so the optimizer does not regenerate trace periodograms
+    during every oracle solve.
+    """
+    f, omega = _condition_grid(grid)
+    image_params = RucciImageParams(beta=2.0, f0=0.03, high_cut_cpd=60.0)
+    saccade_params = SaccadeTraceParams(
+        n_saccades=int(n_saccades),
+        amplitude_mode="fixed",
+        fixed_A_deg=float(A),
+        T_win_s=float(T_win_s),
+        dt_s=0.001,
+        seed=int(seed),
+        random_directions=True,
+    )
+    estimator_params = EstimatorParams(
+        n_orientations=int(n_orientations),
+        n_fft=2048,
+        use_fft=True,
+        window="rect",
+        smooth_sigma_omega_bins=2.5,
+    )
+    traces, t, _ = make_saccade_traces(saccade_params)
+    Q = estimate_Q_from_traces(
+        f,
+        omega,
+        traces,
+        t,
+        params=estimator_params,
+        subtract_temporal_mean=True,
+    )
+    C = rucci_image_spectrum(f, image_params)[:, None] * Q
+    label = (
+        f"Rucci/Boi early fixed-amplitude saccade "
+        f"(A={float(A):g} deg, T={float(T_win_s):g} s)"
+    )
+    return ArraySpectrum(f, omega, C, label, ignore_dc_for_interp=True)
+
+
+def build_named_cell_learning_conditions(
+    condition_set: str = "cycle_pair",
+    *,
+    early_weight: float = 0.5,
+    late_weight: float = 0.5,
+    use_modulated_early: bool = True,
+    grid: str = "fast",
+    early_A_values: Sequence[float] = (1.0, 2.0, 4.0, 6.0, 8.0),
+    late_D_values: Sequence[float] = (0.0375, 0.075, 0.15, 0.3, 0.6),
+    saccade_n_saccades: int = 32,
+    saccade_n_orientations: int = 12,
+    saccade_T_win_s: float = 0.150,
+) -> Tuple[List[Condition], Array]:
+    """Build named condition stacks for cell-class learning scripts.
+
+    ``cycle_pair`` is the canonical two-condition Rucci/Boi split.  The
+    ``movement_sweep`` stack is the nontrivial class-learning experiment: five
+    early fixed-amplitude saccade spectra plus five late Brownian-drift spectra
+    using the cycles-aware width ``D * (2*pi*f)^2``.
+    """
+    name = str(condition_set).lower()
+    if name in {"cycle_pair", "cycle_early_late", "default"}:
+        return build_rucci_cycle_conditions(
+            early_weight=early_weight,
+            late_weight=late_weight,
+            use_modulated_early=use_modulated_early,
+        )
+    if name != "movement_sweep":
+        raise ValueError("condition_set must be 'cycle_pair' or 'movement_sweep'")
+
+    early_A = tuple(float(v) for v in early_A_values)
+    late_D = tuple(float(v) for v in late_D_values)
+    if not early_A:
+        raise ValueError("early_A_values must contain at least one value")
+    if not late_D:
+        raise ValueError("late_D_values must contain at least one value")
+    if int(saccade_n_saccades) < 1:
+        raise ValueError("saccade_n_saccades must be >= 1")
+    if int(saccade_n_orientations) < 1:
+        raise ValueError("saccade_n_orientations must be >= 1")
+    if float(saccade_T_win_s) <= 0:
+        raise ValueError("saccade_T_win_s must be positive")
+
+    conditions: List[Condition] = []
+    for i, A in enumerate(early_A):
+        conditions.append(
+            Condition(
+                name=f"early_A_{A:g}",
+                epoch="early",
+                parameter_name="A",
+                parameter_value=A,
+                spectrum=_fixed_amplitude_saccade_spectrum(
+                    A,
+                    grid=grid,
+                    n_saccades=saccade_n_saccades,
+                    n_orientations=saccade_n_orientations,
+                    T_win_s=saccade_T_win_s,
+                    seed=1234 + i,
+                ),
+            )
+        )
+    for D in late_D:
+        conditions.append(
+            Condition(
+                name=f"late_D_{D:g}",
+                epoch="late",
+                parameter_name="D",
+                parameter_value=D,
+                spectrum=BoiLateDriftApprox(D=D, f_is_cycles=True),
+            )
+        )
+
+    pi = np.concatenate([
+        np.full(len(early_A), float(early_weight) / len(early_A), dtype=float),
+        np.full(len(late_D), float(late_weight) / len(late_D), dtype=float),
+    ])
+    pi = normalize_condition_weights(pi, len(conditions))
+    return conditions, pi
 
 
 def conditions_from_spectrum_specs(

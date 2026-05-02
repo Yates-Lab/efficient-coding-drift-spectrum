@@ -1,0 +1,38 @@
+[
+  {
+    "key": "separable_stationary",
+    "label": "separable stationary",
+    "I_star": 1.5116086982300665,
+    "C_R2_sep": 1.0,
+    "G_R2_sep": 0.3306077950083175,
+    "C_temporal_centroid_log_slope": 7.765939733250205e-17,
+    "reference": "stationary separable movie approximation"
+  },
+  {
+    "key": "dong_atick_linear",
+    "label": "Dong--Atick linear motion",
+    "I_star": 1.7788490471416398,
+    "C_R2_sep": 0.7420040601130485,
+    "G_R2_sep": 0.725813683882548,
+    "C_temporal_centroid_log_slope": 0.2816582136003663,
+    "reference": "Dong & Atick 1995"
+  },
+  {
+    "key": "cycle_early",
+    "label": "early cycle (Rucci/Boi)",
+    "I_star": 1.8119498740697886,
+    "C_R2_sep": 0.9940911408618874,
+    "G_R2_sep": 0.43412093388088135,
+    "C_temporal_centroid_log_slope": 0.15044043150728093,
+    "reference": "Boi et al. 2017 / Rucci-style trace estimate"
+  },
+  {
+    "key": "cycle_late",
+    "label": "late cycle (Rucci/Boi)",
+    "I_star": 1.7428681175312746,
+    "C_R2_sep": 0.9825718862819682,
+    "G_R2_sep": 0.8138196053066648,
+    "C_temporal_centroid_log_slope": 0.3808064402609387,
+    "reference": "Boi et al. 2017 / Rucci-style trace estimate"
+  }
+]

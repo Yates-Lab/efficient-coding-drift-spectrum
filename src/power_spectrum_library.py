@@ -30,6 +30,8 @@ from src.spectra import (
     SaccadeSpectrum,
     DriftPlusSaccadeSpectrum,
     LinearMotionSpectrum,
+    SeparableMovieSpectrum,
+    BoiLateDriftApprox,
 )
 
 TWOPI = 2.0 * np.pi
@@ -38,6 +40,7 @@ TWOPI = 2.0 * np.pi
 DEFAULT_DRIFT_SWEEP = (0.05, 0.5, 2.0, 10.0, 50.0)
 DEFAULT_SACCADE_SWEEP = (0.5, 1.0, 2.0, 4.0, 8.0)
 DEFAULT_EQUIVALENT_CASES = (0.3, 2.5, 7.0)
+DEFAULT_SEPARABLE_OMEGA0 = 0.05
 
 
 @dataclass(frozen=True)
@@ -154,6 +157,67 @@ def linear_motion_spectrum_specs(
     ]
 
 
+def separable_movie_spectrum_specs(
+    omega0_values: Sequence[float] = (DEFAULT_SEPARABLE_OMEGA0,),
+    *,
+    color: Optional[str] = None,
+) -> list[SpectrumSpec]:
+    """Stationary separable natural-movie controls.
+
+    These are the explicit old-school controls:
+    S(k, omega) proportional to 1/(|k|^2 |omega|^2).  They remove the
+    movement-induced f--omega coupling.
+    """
+    return [
+        SpectrumSpec(
+            key=f"separable_omega0_{omega0:g}",
+            label=rf"separable $\omega_0={omega0:g}$",
+            title=rf"Separable stationary ($\omega_0={omega0:g}$)",
+            spectrum=SeparableMovieSpectrum(omega0=float(omega0)),
+            family="separable_stationary",
+            parameters=_params(omega0=omega0),
+            color=color,
+            reference="stationary separable movie control",
+            notes="Paper-style separable power law: S(k,omega) proportional to 1/(|k|^2 |omega|^2).",
+        )
+        for omega0 in omega0_values
+    ]
+
+
+def stationary_vs_active_story_specs() -> list[SpectrumSpec]:
+    """Core comparison set for the narrative figure.
+
+    This intentionally contrasts: (i) a stationary separable approximation,
+    (ii) the Dong--Atick linear-motion control, and (iii) the Rucci/Boi
+    non-stationary early/late cycle spectra.
+    """
+    cycle_specs = cycle_spectrum_specs(use_modulated_early=True)
+    return [
+        SpectrumSpec(
+            key="separable_stationary",
+            label="separable stationary",
+            title="Separable stationary",
+            spectrum=SeparableMovieSpectrum(omega0=DEFAULT_SEPARABLE_OMEGA0),
+            family="stationary_control",
+            parameters=_params(omega0=DEFAULT_SEPARABLE_OMEGA0),
+            color="tab:gray",
+            reference="stationary separable movie approximation",
+        ),
+        SpectrumSpec(
+            key="dong_atick_linear",
+            label="Dong--Atick linear motion",
+            title="Stationary linear motion",
+            spectrum=LinearMotionSpectrum(s=1.0),
+            family="stationary_control",
+            parameters=_params(s=1.0),
+            color="tab:blue",
+            reference="Dong & Atick 1995",
+        ),
+        cycle_specs[0],
+        cycle_specs[1],
+    ]
+
+
 def cycle_spectrum_specs(*, use_modulated_early: bool = True) -> list[SpectrumSpec]:
     """Canonical trace-based early/late Rucci/Boi cycle spectra."""
     early, late = cycle_solver_spectra(use_modulated_early=use_modulated_early)
@@ -256,6 +320,8 @@ SPECTRUM_SETS: Dict[str, Callable[..., list[SpectrumSpec]]] = {
     "drift_sweep": drift_spectrum_specs,
     "saccade_sweep": saccade_spectrum_specs,
     "linear_motion_sweep": linear_motion_spectrum_specs,
+    "separable_movie": separable_movie_spectrum_specs,
+    "stationary_vs_active_story": stationary_vs_active_story_specs,
     "cycle_early_late": cycle_spectrum_specs,
     "comparison_controls_and_cycle": spectrum_comparison_spec_objects,
 }
@@ -265,6 +331,8 @@ SPECTRUM_SET_DESCRIPTIONS = {
     "drift_sweep": "Brownian drift spectra parameterized by D.",
     "saccade_sweep": "Stationary Poisson-saccade spectra parameterized by A.",
     "linear_motion_sweep": "Gaussian linear-motion spectra parameterized by s.",
+    "separable_movie": "Stationary separable C_I(f) Q_T(omega) controls.",
+    "stationary_vs_active_story": "Separable control, Dong--Atick linear motion, and Rucci/Boi early/late spectra.",
     "cycle_early_late": "Canonical trace-based Rucci/Boi early and late fixation spectra.",
     "comparison_controls_and_cycle": "Drift, saccade, drift+saccade, and cycle controls.",
 }
@@ -475,6 +543,8 @@ __all__ = [
     "saccade_spectrum_specs",
     "drift_plus_saccade_specs",
     "linear_motion_spectrum_specs",
+    "separable_movie_spectrum_specs",
+    "stationary_vs_active_story_specs",
     "cycle_spectrum_specs",
     "spectrum_comparison_spec_objects",
     "equivalent_saccade_drift_pair_specs",

@@ -117,6 +117,33 @@ def run(
     else:
         raise ValueError(f"Unknown grid {grid!r}; use 'fast' or 'hi_res'.")
 
+    return solve_on_grid(
+        spectrum,
+        f,
+        omega,
+        sigma_in=sigma_in,
+        sigma_out=sigma_out,
+        P0=P0,
+        band=band,
+    )
+
+
+def solve_on_grid(
+    spectrum: Spectrum,
+    f: np.ndarray,
+    omega: np.ndarray,
+    sigma_in: float = 0.3,
+    sigma_out: float = 1.0,
+    P0: float = 50.0,
+    band: tuple = (F_MAX, OMEGA_MIN, OMEGA_MAX),
+) -> Result:
+    """Compute the optimal filter for ``spectrum`` on an explicit grid.
+
+    This is the transparent path for interactive scripts: choose ``f`` and
+    ``omega`` once, plot spectra on that grid, then solve on the same grid.
+    """
+    f = np.asarray(f, dtype=float)
+    omega = np.asarray(omega, dtype=float)
     f_max, omega_min, omega_max = band
     weights = radial_weights(f, omega)
     mask = band_mask_radial(f, omega, f_max, omega_min, omega_max)
@@ -305,6 +332,7 @@ __all__ = [
     "KernelConfig",
     "Result",
     "run",
+    "solve_on_grid",
     "run_config",
     "run_many",
     "sweep_parameter",

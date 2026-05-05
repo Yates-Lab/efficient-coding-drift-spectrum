@@ -10,6 +10,7 @@ Running the whole file as a normal script still writes the standard outputs:
   outputs/fig1a_main.png
   outputs/fig1b_boi_cycle.png
   outputs/fig1c_library.png
+  outputs/fig1d_optimal_filters.png
 """
 
 #%%
@@ -25,21 +26,21 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from src.spectra import DriftSpectrum, SaccadeSpectrum
-from src.power_spectrum_library import (
-    cycle_decomposition_panels,
-    overlay_curve_hz,
-    spectrum_library_panels,
+from src.spectra import (
+    DriftSpectrum,
+    LinearMotionSpectrum,
+    SaccadeSpectrum,
+    SeparableMovieSpectrum,
 )
+
 from src.plotting import (
     add_log_colorbar,
-    overlay_drift,
     panel_loglog,
-    panel_loglog_hz,
     radial_log_grid,
     setup_style,
     shared_lims,
 )
+from src.pipeline import solve_on_grid
 
 setup_style()
 %matplotlib inline
@@ -90,6 +91,70 @@ def make_grid():
         omega_min=OMEGA_MIN,
         omega_max=OMEGA_MAX,
     )
+
+
+def plot_panels(
+    f,
+    omega,
+    arrays,
+    labels,
+    *,
+    filename=None,
+    title=None,
+    cmap=CMAP,
+    colorbar_label=None,
+):
+    arrays = list(arrays)
+    labels = list(labels)
+    _, vmax = shared_lims(arrays, floor=FLOOR)
+
+    fig, axes = plt.subplots(
+        1,
+        len(arrays),
+        figsize=(2.55 * len(arrays), 3.1),
+        sharex=True,
+        sharey=True,
+        squeeze=False,
+        gridspec_kw={"wspace": 0.20},
+    )
+    axes = axes.ravel()
+
+    for ax, array, label in zip(axes, arrays, labels):
+        panel_loglog(
+            ax,
+            f,
+            omega,
+            array / vmax,
+            FLOOR,
+            1.0,
+            n_levels=N_LEVELS,
+            cmap=cmap,
+            f_min=F_MIN,
+            f_max=F_MAX,
+            omega_min=OMEGA_MIN,
+            omega_max=OMEGA_MAX,
+        )
+        ax.set_title(label, pad=4)
+
+    for ax in axes:
+        ax.set_xlabel(r"$f$ (cycles/unit)")
+    axes[0].set_ylabel(r"$\omega$ (rad/s)")
+
+    fig.subplots_adjust(left=0.06, right=0.93, top=0.84, bottom=0.18)
+    if title:
+        fig.suptitle(title, y=0.99, fontsize=10.5)
+    add_log_colorbar(
+        fig,
+        [0.945, 0.20, 0.010, 0.60],
+        cmap=cmap,
+        vmin=FLOOR,
+        vmax=1.0,
+        label=colorbar_label,
+    )
+
+    if filename is not None:
+        save_and_display(fig, filename)
+    return fig, axes
 
 
 #%% Figure 1a: compute spectra
@@ -179,95 +244,77 @@ add_log_colorbar(
 
 _ = save_and_display(fig, "fig1a_main.png")
 
-#%% Figure 1c: compute panels
-from src.spectra import (
-    DriftSpectrum,
-    LinearMotionSpectrum,
-    SaccadeSpectrum,
-    SeparableMovieSpectrum,
+#%% Figure 1c: choose spectra as objects
+spectra_library = [
+    ("Separable", SeparableMovieSpectrum(omega0=0.05)),
+    ("Drift", DriftSpectrum(D=2)),
+    ("Saccade", SaccadeSpectrum(A=3.0)),
+    ("Linear", LinearMotionSpectrum(s=5.0)),
+]
+labels = [label for label, _ in spectra_library]
+
+#%% Figure 1c: evaluate spectra on this grid
+C_list = [spec.C(f, omega) for _, spec in spectra_library]
+
+#%% Figure 1c: plot spectra
+fig, axes = plot_panels(
+    f,
+    omega,
+    C_list,
+    labels,
+    filename="fig1c_library.png",
+    title=r"Figure 1c  spectrum library $C_\theta(f, \omega)$",
+    colorbar_label=r"$C_\theta(f,\omega) / \max_\mathrm{set}\,C_\theta$",
 )
 
-spectrum_examples = [SeparableMovieSpectrum(omega0=0.05).C(f, omega),
-    DriftSpectrum(D=2).C(f, omega),
-    SaccadeSpectrum(A=3.0).C(f, omega),
-    LinearMotionSpectrum(s=1.0).C(f, omega),
- ]
-
-titles = ['Separable', 'Drift', 'Saccade', 'Linear']
-
-_, fig1c_vmax = shared_lims(spectrum_examples, floor=FLOOR)
-
-#%% Figure 1c: draw and inspect
-fig, axes = plt.subplots(
-    1,
-    4,
-    figsize=(10.2, 3.1),
-    sharex=True,
-    sharey=True,
-    gridspec_kw={"wspace": 0.20},
-)
-
-for ax, C, title in zip(axes, spectrum_examples, titles):
-    ax.set_visible(True)
-    panel_loglog(
-        ax,
-        f,
-        omega,
-        C / fig1a_vmax,
-        FLOOR,
-        1.0,
-        n_levels=N_LEVELS,
-        cmap=CMAP,
-        f_min=F_MIN,
-        f_max=F_MAX,
-        omega_min=OMEGA_MIN,
-        omega_max=OMEGA_MAX,
-    )
-    ax.set_title(title, pad=4)
-
-for ax in axes:
-    ax.set_xlabel(r"spatial frequency $f$ (cpd)")
-axes[0].set_ylabel("temporal frequency (Hz)")
-
-fig.subplots_adjust(left=0.06, right=0.93, top=0.84, bottom=0.18)
-fig.suptitle(
-    r"Figure 1c  spectrum library $C_\theta(f, \omega)$",
-    y=0.99,
-    fontsize=10.5,
-)
-add_log_colorbar(
-    fig,
-    [0.945, 0.20, 0.010, 0.60],
-    cmap=CMAP,
-    vmin=FLOOR,
-    vmax=1.0,
-    label=r"$C_\theta(f,\omega) / \max_\mathrm{panel}\,C_\theta$",
-)
-save_and_display(fig, "fig1c_library.png")
-
-# %% Get the optimal filter
-from src.pipeline import SolveConfig, run_many
-
-spectrum_examples = [SeparableMovieSpectrum(omega0=0.05),
-    DriftSpectrum(D=2),
-    SaccadeSpectrum(A=3.0),
-    LinearMotionSpectrum(s=1.0),
- ]
-
+#%% Choose efficient-coding parameters
 sigma_in = 0.2
 sigma_out = 2.0
 P0 = 50.0
 
-s = SolveConfig(
-            sigma_in=sigma_in, sigma_out=sigma_out, P0=P0,
-            grid="hi_res",
-        )
 
-Res = run_many(spectrum_examples, s)
+row_drift = [(f'Drift (D={D})' ,DriftSpectrum(D=D)) for D in DRIFT_DS]
+row_sacc = [(f'Saccade (A={A})', SaccadeSpectrum(A=A)) for A in SACCADE_AS]
+spectra = row_drift + row_sacc
 
+C_list = [spec.C(f, omega) for _, spec in spectra]
 
+#%% Solve optimal filters on this same grid
+results = [
+    solve_on_grid(
+        spec,
+        f,
+        omega,
+        sigma_in,
+        sigma_out,
+        P0,
+        band=(F_MAX, OMEGA_MIN, OMEGA_MAX),
+    )
+    for _, spec in spectra
+]
 
-# %%
-ax = plt.gca()
-panel_loglog(ax, f, omega, Res[0].v_sq)
+#%% Plot optimal filters
+labels = [label for label, _ in spectra]
+
+fig, axes = plot_panels(
+    f,
+    omega,
+    C_list,
+    labels,
+    filename="fig1c_library.png",
+    title=r"Figure 1c  spectrum library $C_\theta(f, \omega)$",
+    colorbar_label=r"$C_\theta(f,\omega) / \max_\mathrm{set}\,C_\theta$",
+)
+
+fig, axes = plot_panels(
+    f,
+    omega,
+    [r.v_sq for r in results],
+    labels,
+    filename="fig1d_optimal_filters.png",
+    title=r"Optimal filters $|v^*(f,\omega)|^2$",
+    cmap="viridis",
+    colorbar_label=r"$|v^*|^2 / \max_\mathrm{set}\,|v^*|^2$",
+)
+
 # %%

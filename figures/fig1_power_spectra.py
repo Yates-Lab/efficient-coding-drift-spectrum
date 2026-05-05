@@ -1,126 +1,65 @@
+#%%
 """Figure 1: on-retina power spectra C_theta(f, omega).
 
-Three companion figures:
-  1a  main examples: drift sweep over D; saccade sweep over A.
-  1b  analytic cycle selector: early vs late fixation.
-  1c  spectrum library: Brownian drift, saccade, Dong-Atick separable
-      approximation, and Dong-Atick linear velocity spread.
+This file is intentionally written as an interactive percent-cell script.
+Open it in VS Code, Spyder, or another editor that understands ``#%%`` cells,
+then run cells one at a time. The parameter cell below is the main place to
+tinker; rerun any downstream figure cell to redraw after edits.
 
-Every panel is a log-log contourf of C_theta(f, omega) on
-f in [0.1, 4] cycles/unit and omega in [0.5, 400] rad/s. White overlays
-mark the characteristic movement-induced cross-over (omega = D f^2 for
-drift, omega = s f for linear motion) on panels where they are meaningful.
+Running the whole file as a normal script still writes the standard outputs:
+  outputs/fig1a_main.png
+  outputs/fig1b_boi_cycle.png
+  outputs/fig1c_library.png
 """
 
+#%%
 from __future__ import annotations
 
 import sys
-sys.path.insert(0, ".")
+from pathlib import Path
 
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib as mpl
 
-from src.spectra import (
-    DriftSpectrum,
-    SaccadeSpectrum,
-)
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from src.spectra import DriftSpectrum, SaccadeSpectrum
 from src.power_spectrum_library import (
     cycle_decomposition_panels,
-    spectrum_library_panels,
     overlay_curve_hz,
+    spectrum_library_panels,
 )
-from src.plotting import setup_style
-
+from src.plotting import (
+    add_log_colorbar,
+    overlay_drift,
+    panel_loglog,
+    panel_loglog_hz,
+    radial_log_grid,
+    setup_style,
+    shared_lims,
+)
 
 setup_style()
+%matplotlib inline
 
-
-F_MIN, F_MAX = 0.1, 6.0
+#%%
+# Editable plotting parameters. Change these, then rerun the downstream cells.
+F_MIN, F_MAX = 0.1, 10.0
 OMEGA_MIN, OMEGA_MAX = 0.25, 400.0
+N_F, N_OMEGA = 200, 200
 CMAP = "magma"
 N_LEVELS = 24
-FLOOR = 1e-6  # vmin = FLOOR * shared_vmax
+FLOOR = 1e-6
 
+DRIFT_DS = [0.05, 0.5, 2.0, 10.0, 50.0]
+SACCADE_AS = [0.5, 1.0, 2.0, 4.0, 8.0]
 
-def make_grid(n_f=200, n_omega=200):
-    f = np.geomspace(F_MIN, F_MAX, n_f)
-    omega = np.geomspace(OMEGA_MIN, OMEGA_MAX, n_omega)
-    return f, omega
-
-
-def shared_lims(panels):
-    v = np.concatenate([np.asarray(p).ravel() for p in panels])
-    v = v[np.isfinite(v) & (v > 0)]
-    vmax = float(v.max())
-    return FLOOR * vmax, vmax
-
-
-def panel_loglog(ax, f, omega, C, vmin, vmax):
-    """Plot C with shape (Nf, Nomega) as a log-log contourf in (f, omega)."""
-    Z = np.asarray(C).T
-    Z = np.where(np.isfinite(Z) & (Z > 0), Z, vmin)
-    Z = np.maximum(Z, vmin)
-    levels = np.geomspace(vmin, vmax, N_LEVELS)
-    cf = ax.contourf(
-        f, omega, Z, levels=levels,
-        norm=mpl.colors.LogNorm(vmin=vmin, vmax=vmax),
-        cmap=CMAP, extend="both",
-    )
-    ax.set_xscale("log")
-    ax.set_yscale("log")
-    ax.set_xlim(F_MIN, F_MAX)
-    ax.set_ylim(OMEGA_MIN, OMEGA_MAX)
-    return cf
-
-
-def panel_loglog_hz(ax, panel, vmin, vmax):
-    """Plot a shared SpectrumPanel on log f / log temporal-Hz axes."""
-    Z = np.asarray(panel.C).T
-    Z = np.where(np.isfinite(Z) & (Z > 0), Z, vmin)
-    Z = np.maximum(Z, vmin)
-    levels = np.geomspace(vmin, vmax, N_LEVELS)
-    cf = ax.contourf(
-        panel.f,
-        panel.temporal_hz,
-        Z,
-        levels=levels,
-        norm=mpl.colors.LogNorm(vmin=vmin, vmax=vmax),
-        cmap=CMAP,
-        extend="both",
-    )
-    ax.set_xscale("log")
-    ax.set_yscale("log")
-    ax.set_xlim(panel.f.min(), panel.f.max())
-    ax.set_ylim(panel.temporal_hz.min(), panel.temporal_hz.max())
-    overlay = overlay_curve_hz(panel)
-    if overlay is not None:
-        ax.plot(overlay[0], overlay[1], color="white", lw=0.8, alpha=0.6)
-    return cf
-
-
-def overlay_drift(ax, f, D):
-    ax.plot(f, D * f ** 2, color="white", lw=0.8, alpha=0.6)
-
-
-def overlay_drift_cycles(ax, f, D):
-    ax.plot(f, D * (2.0 * np.pi * f) ** 2, color="white", lw=0.8, alpha=0.6)
-
-
-def overlay_linear(ax, f, s):
-    ax.plot(f, s * f, color="white", lw=0.8, alpha=0.6)
-
-
-def add_colorbar(fig, rect, label):
-    cax = fig.add_axes(rect)
-    cb = mpl.colorbar.ColorbarBase(
-        cax, cmap=plt.get_cmap(CMAP),
-        norm=mpl.colors.LogNorm(vmin=FLOOR, vmax=1.0),
-        orientation="vertical", extend="min",
-    )
-    cb.ax.tick_params(direction="out", labelsize=7)
-    cb.set_label(label)
-
+SAVE_FIGS = True
+SHOW_FIGS = True
+CLOSE_AFTER_SAVE = True
+OUTDIR = Path("outputs")
 
 CBAR_LABEL = (
     r"$C_\theta(f,\omega) / \max_{\mathrm{fig}}\,C_\theta$"
@@ -128,128 +67,207 @@ CBAR_LABEL = (
 )
 
 
-def fig1a():
-    """Main example spectra: 2 rows x 5 columns."""
-    f, omega = make_grid()
+#%%
+def save_and_display(fig, filename):
+    OUTDIR.mkdir(parents=True, exist_ok=True)
+    if SAVE_FIGS:
+        out = OUTDIR / filename
+        fig.savefig(out)
+        print(f"wrote {out}")
+    if SHOW_FIGS:
+        plt.show(block=False)
+    if CLOSE_AFTER_SAVE and not SHOW_FIGS:
+        plt.close(fig)
+    return fig
 
-    Ds = [0.05, 0.5, 2.0, 10.0, 50.0]
-    As = [0.5, 1.0, 2.0, 4.0, 8.0]
 
-    row_drift = [DriftSpectrum(D=D).C(f, omega) for D in Ds]
-    row_sacc = [SaccadeSpectrum(A=A, lam=3.0).C(f, omega) for A in As]
-
-    vmin, vmax = shared_lims(row_drift + row_sacc)
-
-    fig, axes = plt.subplots(
-        2, 5, figsize=(10.0, 4.6), sharex=True, sharey=True,
-        gridspec_kw={"hspace": 0.45, "wspace": 0.18},
+def make_grid():
+    return radial_log_grid(
+        N_F,
+        N_OMEGA,
+        f_min=F_MIN,
+        f_max=F_MAX,
+        omega_min=OMEGA_MIN,
+        omega_max=OMEGA_MAX,
     )
 
-    for ax, C, D in zip(axes[0], row_drift, Ds):
-        panel_loglog(ax, f, omega, C, vmin, vmax)
-        ax.set_title(rf"$D = {D:g}$", pad=2)
-        overlay_drift(ax, f, D)
 
-    for ax, C, A in zip(axes[1], row_sacc, As):
-        panel_loglog(ax, f, omega, C, vmin, vmax)
-        ax.set_title(rf"$A = {A:g}$", pad=2)
+#%% Figure 1a: compute spectra
+f, omega = make_grid()
 
-    for ax in axes[-1]:
+row_drift = [DriftSpectrum(D=D).C(f, omega) for D in DRIFT_DS]
+row_sacc = [SaccadeSpectrum(A=A).C(f, omega) for A in SACCADE_AS]
+_, fig1a_vmax = shared_lims(row_drift + row_sacc, floor=FLOOR)
+
+#%% Figure 1a: draw and inspect
+n_cols = max(len(DRIFT_DS), len(SACCADE_AS))
+fig, axes = plt.subplots(
+    2,
+    n_cols,
+    figsize=(2.0 * n_cols, 4.6),
+    sharex=True,
+    sharey=True,
+    squeeze=False,
+    gridspec_kw={"hspace": 0.45, "wspace": 0.18},
+)
+
+for ax, C, D in zip(axes[0], row_drift, DRIFT_DS):
+    ax.set_visible(True)
+    panel_loglog(
+        ax,
+        f,
+        omega,
+        C / fig1a_vmax,
+        FLOOR,
+        1.0,
+        n_levels=N_LEVELS,
+        cmap=CMAP,
+        f_min=F_MIN,
+        f_max=F_MAX,
+        omega_min=OMEGA_MIN,
+        omega_max=OMEGA_MAX,
+    )
+    ax.set_title(rf"$D = {D:g}$", pad=2)
+
+for ax, C, A in zip(axes[1], row_sacc, SACCADE_AS):
+    ax.set_visible(True)
+    panel_loglog(
+        ax,
+        f,
+        omega,
+        C / fig1a_vmax,
+        FLOOR,
+        1.0,
+        n_levels=N_LEVELS,
+        cmap=CMAP,
+        f_min=F_MIN,
+        f_max=F_MAX,
+        omega_min=OMEGA_MIN,
+        omega_max=OMEGA_MAX,
+    )
+    ax.set_title(rf"$A = {A:g}$", pad=2)
+
+# add labels
+for ax in axes[-1]:
+    if ax.get_visible():
         ax.set_xlabel(r"$f$ (cycles/unit)")
-    for ax_row in axes:
-        ax_row[0].set_ylabel(r"$\omega$ (rad/s)")
 
-    fig.text(0.015, 0.715, "Diffusion\n(vary $D$)", rotation=90,
-             fontsize=9, va="center", ha="center")
-    fig.text(0.015, 0.305, "Saccades\n(vary $A$, $\\lambda=3$)",
-             rotation=90, fontsize=9, va="center", ha="center")
+for row in axes:
+    visible = [ax for ax in row if ax.get_visible()]
+    if visible:
+        visible[0].set_ylabel(r"$\omega$ (rad/s)")
 
-    fig.subplots_adjust(left=0.07, right=0.91, top=0.91, bottom=0.10)
-    fig.suptitle(
-        r"Figure 1a  on-retina power spectra $C_\theta(f, \omega)$",
-        y=0.985, fontsize=10.5,
+fig.text(0.015, 0.715, "Diffusion\n(vary $D$)", rotation=90,
+         fontsize=9, va="center", ha="center")
+fig.text(0.015, 0.305, "Saccades\n(vary $A$)",
+         rotation=90, fontsize=9, va="center", ha="center")
+fig.subplots_adjust(left=0.07, right=0.91, top=0.91, bottom=0.10)
+fig.suptitle(
+    r"Figure 1a  on-retina power spectra $C_\theta(f, \omega)$",
+    y=0.985,
+    fontsize=10.5,
+)
+add_log_colorbar(
+    fig,
+    [0.93, 0.13, 0.012, 0.74],
+    cmap=CMAP,
+    vmin=FLOOR,
+    vmax=1.0,
+    label=CBAR_LABEL,
+)
+
+
+_ = save_and_display(fig, "fig1a_main.png")
+
+#%% Figure 1c: compute panels
+from src.spectra import (
+    DriftSpectrum,
+    LinearMotionSpectrum,
+    SaccadeSpectrum,
+    SeparableMovieSpectrum,
+)
+
+spectrum_examples = [SeparableMovieSpectrum(omega0=0.05).C(f, omega),
+    DriftSpectrum(D=2).C(f, omega),
+    SaccadeSpectrum(A=3.0).C(f, omega),
+    LinearMotionSpectrum(s=1.0).C(f, omega),
+ ]
+
+titles = ['Separable', 'Drift', 'Saccade', 'Linear']
+
+_, fig1c_vmax = shared_lims(spectrum_examples, floor=FLOOR)
+
+#%% Figure 1c: draw and inspect
+fig, axes = plt.subplots(
+    1,
+    4,
+    figsize=(10.2, 3.1),
+    sharex=True,
+    sharey=True,
+    gridspec_kw={"wspace": 0.20},
+)
+
+for ax, C, title in zip(axes, spectrum_examples, titles):
+    ax.set_visible(True)
+    panel_loglog(
+        ax,
+        f,
+        omega,
+        C / fig1a_vmax,
+        FLOOR,
+        1.0,
+        n_levels=N_LEVELS,
+        cmap=CMAP,
+        f_min=F_MIN,
+        f_max=F_MAX,
+        omega_min=OMEGA_MIN,
+        omega_max=OMEGA_MAX,
     )
-    add_colorbar(fig, [0.93, 0.13, 0.012, 0.74], CBAR_LABEL)
+    ax.set_title(title, pad=4)
 
-    out = "outputs/fig1a_main.png"
-    fig.savefig(out)
-    plt.close(fig)
-    print(f"wrote {out}")
+for ax in axes:
+    ax.set_xlabel(r"spatial frequency $f$ (cpd)")
+axes[0].set_ylabel("temporal frequency (Hz)")
 
+fig.subplots_adjust(left=0.06, right=0.93, top=0.84, bottom=0.18)
+fig.suptitle(
+    r"Figure 1c  spectrum library $C_\theta(f, \omega)$",
+    y=0.99,
+    fontsize=10.5,
+)
+add_log_colorbar(
+    fig,
+    [0.945, 0.20, 0.010, 0.60],
+    cmap=CMAP,
+    vmin=FLOOR,
+    vmax=1.0,
+    label=r"$C_\theta(f,\omega) / \max_\mathrm{panel}\,C_\theta$",
+)
+save_and_display(fig, "fig1c_library.png")
 
-def fig1b():
-    """Analytic cycle selector: early vs late fixation."""
-    panels = cycle_decomposition_panels(normalize="panel")
-    vmin, vmax = FLOOR, 1.0
+# %% Get the optimal filter
+from src.pipeline import SolveConfig, run_many
 
-    fig, axes = plt.subplots(
-        1, 2, figsize=(6.0, 3.3), sharex=True, sharey=True,
-        gridspec_kw={"wspace": 0.22},
-    )
+spectrum_examples = [SeparableMovieSpectrum(omega0=0.05),
+    DriftSpectrum(D=2),
+    SaccadeSpectrum(A=3.0),
+    LinearMotionSpectrum(s=1.0),
+ ]
 
-    for ax, panel in zip(axes, panels):
-        panel_loglog_hz(ax, panel, vmin, vmax)
-        ax.axhline(8.0, color="white", lw=0.6, ls=":", alpha=0.8)
-        ax.set_title(panel.title, pad=4)
+sigma_in = 0.2
+sigma_out = 2.0
+P0 = 50.0
 
-    for ax in axes:
-        ax.set_xlabel(r"spatial frequency $f$ (cpd)")
-    axes[0].set_ylabel("temporal frequency (Hz)")
+s = SolveConfig(
+            sigma_in=sigma_in, sigma_out=sigma_out, P0=P0,
+            grid="hi_res",
+        )
 
-    fig.subplots_adjust(left=0.10, right=0.88, top=0.82, bottom=0.16)
-    fig.suptitle(
-        r"Figure 1b  analytic cycle selector $C_\theta(f, \omega)$: "
-        r"early vs late fixation",
-        y=0.99, fontsize=10.5,
-    )
-    add_colorbar(
-        fig,
-        [0.90, 0.18, 0.018, 0.64],
-        r"$C_\theta(f,\omega) / \max_\mathrm{panel}\,C_\theta$",
-    )
-
-    out = "outputs/fig1b_boi_cycle.png"
-    fig.savefig(out)
-    plt.close(fig)
-    print(f"wrote {out}")
+Res = run_many(spectrum_examples, s)
 
 
-def fig1c():
-    """Spectrum library: drift, saccade, separable approximation, linear velocity."""
-    panels = spectrum_library_panels(normalize="panel")
-    vmin, vmax = FLOOR, 1.0
 
-    fig, axes = plt.subplots(
-        1, 4, figsize=(10.2, 3.1), sharex=True, sharey=True,
-        gridspec_kw={"wspace": 0.20},
-    )
-
-    for ax, panel in zip(axes, panels):
-        panel_loglog_hz(ax, panel, vmin, vmax)
-        ax.set_title(panel.title, pad=4)
-
-    for ax in axes:
-        ax.set_xlabel(r"spatial frequency $f$ (cpd)")
-    axes[0].set_ylabel("temporal frequency (Hz)")
-
-    fig.subplots_adjust(left=0.06, right=0.93, top=0.84, bottom=0.18)
-    fig.suptitle(
-        r"Figure 1c  spectrum library $C_\theta(f, \omega)$",
-        y=0.99, fontsize=10.5,
-    )
-    add_colorbar(
-        fig,
-        [0.945, 0.20, 0.010, 0.60],
-        r"$C_\theta(f,\omega) / \max_\mathrm{panel}\,C_\theta$",
-    )
-
-    out = "outputs/fig1c_library.png"
-    fig.savefig(out)
-    plt.close(fig)
-    print(f"wrote {out}")
-
-
-if __name__ == "__main__":
-    fig1a()
-    fig1b()
-    fig1c()
+# %%
+ax = plt.gca()
+panel_loglog(ax, f, omega, Res[0].v_sq)
+# %%

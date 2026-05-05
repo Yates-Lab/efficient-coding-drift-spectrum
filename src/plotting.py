@@ -53,22 +53,171 @@ def parameter_palette(n, cmap="viridis", lo=0.10, hi=0.90):
 
 
 # ---------------------------------------------------------------------------
+# Shared plotting primitives
+# ---------------------------------------------------------------------------
+
+def log_grid(x_min, x_max, n):
+    """Return a positive logarithmic grid."""
+    if x_min <= 0 or x_max <= 0:
+        raise ValueError("log_grid bounds must be positive")
+    if n < 2:
+        raise ValueError("log_grid requires at least two points")
+    return np.geomspace(float(x_min), float(x_max), int(n))
+
+
+def radial_log_grid(
+    n_f=200,
+    n_omega=200,
+    *,
+    f_min=0.1,
+    f_max=6.0,
+    omega_min=0.25,
+    omega_max=400.0,
+):
+    """Positive log-spaced (f, omega) display grid for spectrum panels."""
+    return (
+        log_grid(f_min, f_max, n_f),
+        log_grid(omega_min, omega_max, n_omega),
+    )
+
+
+def positive_frequency(omega, *, temporal_hz=False):
+    """Return a positive-frequency mask and display-axis values."""
+    omega = np.asarray(omega, dtype=float)
+    mask = omega > 0
+    y = omega[mask]
+    if temporal_hz:
+        y = y / (2.0 * np.pi)
+    return mask, y
+
+
+def finite_positive_values(arrays):
+    """Flatten one or more arrays to finite positive values."""
+    vals = np.concatenate([np.asarray(a, dtype=float).ravel() for a in arrays])
+    return vals[np.isfinite(vals) & (vals > 0)]
+
+
+def shared_lims(arrays, *, floor=1e-6, percentile=None):
+    """Return shared positive log-color limits for one or more arrays."""
+    vals = finite_positive_values(arrays)
+    if vals.size == 0:
+        return float(floor), 1.0
+    vmax = float(np.nanpercentile(vals, percentile)) if percentile is not None else float(vals.max())
+    vmax = max(vmax, 1e-300)
+    return max(float(floor) * vmax, 1e-300), vmax
+
+
+def log_levels(vmin, vmax, n_levels):
+    """Return log-spaced contour levels with safe positive bounds."""
+    vmin = max(float(vmin), 1e-300)
+    vmax = max(float(vmax), vmin * (1.0 + 1e-12))
+    return np.geomspace(vmin, vmax, int(n_levels))
+
+
+def add_log_colorbar(
+    fig,
+    rect,
+    *,
+    cmap="magma",
+    vmin=1e-6,
+    vmax=1.0,
+    label=None,
+    orientation="vertical",
+    extend="min",
+    tick_labelsize=7,
+):
+    """Add a standalone log-scaled colorbar at ``rect`` in figure coords."""
+    cax = fig.add_axes(rect)
+    vmin = max(float(vmin), 1e-300)
+    vmax = max(float(vmax), vmin * (1.0 + 1e-12))
+    cb = mpl.colorbar.ColorbarBase(
+        cax,
+        cmap=plt.get_cmap(cmap),
+        norm=mpl.colors.LogNorm(vmin=vmin, vmax=vmax),
+        orientation=orientation,
+        extend=extend,
+    )
+    cb.ax.tick_params(direction="out", labelsize=tick_labelsize)
+    if label is not None:
+        cb.set_label(label)
+    return cb
+
+
+def add_band_edges(
+    ax,
+    *,
+    f_max=None,
+    omega_min=None,
+    omega_max=None,
+    color="white",
+    lw=0.5,
+    ls=":",
+    alpha=0.6,
+):
+    """Overlay standard spatial and temporal band edges on a panel."""
+    if f_max is not None:
+        ax.axvline(f_max, color=color, lw=lw, ls=ls, alpha=alpha)
+    if omega_min is not None:
+        ax.axhline(omega_min, color=color, lw=lw, ls=ls, alpha=alpha)
+    if omega_max is not None:
+        ax.axhline(omega_max, color=color, lw=lw, ls=ls, alpha=alpha)
+
+
+def overlay_curve(ax, x, y, *, color="white", lw=0.8, ls="-", alpha=0.6, **kwargs):
+    """Overlay a movement/crossover curve with the shared white panel style."""
+    return ax.plot(x, y, color=color, lw=lw, ls=ls, alpha=alpha, **kwargs)
+
+
+def overlay_drift(ax, f, D, *, temporal_hz=False, cycles=False, **kwargs):
+    """Overlay the Brownian drift crossover curve."""
+    f = np.asarray(f, dtype=float)
+    y = float(D) * f ** 2
+    if cycles:
+        y = float(D) * (2.0 * np.pi * f) ** 2
+    if temporal_hz:
+        y = y / (2.0 * np.pi)
+    return overlay_curve(ax, f, y, **kwargs)
+
+
+def overlay_linear(ax, f, s, *, temporal_hz=False, **kwargs):
+    """Overlay the linear-motion crossover curve."""
+    f = np.asarray(f, dtype=float)
+    y = float(s) * f
+    if temporal_hz:
+        y = y / (2.0 * np.pi)
+    return overlay_curve(ax, f, y, **kwargs)
+
+
+# ---------------------------------------------------------------------------
 # Log contour plots
 # ---------------------------------------------------------------------------
 
-def log_contourf(ax, x, y, Z, n_levels=20, cmap="magma", vmin_floor=1e-6,
-                 logx=True, logy=True, label=None, extend="both"):
+def log_contourf(
+    ax,
+    x,
+    y,
+    Z,
+    n_levels=20,
+    cmap="magma",
+    vmin_floor=1e-6,
+    logx=True,
+    logy=True,
+    label=None,
+    extend="both",
+    vmin=None,
+    vmax=None,
+):
     """contourf with logarithmic color scale and (optionally) log axes.
 
     Z is positive (or near-positive). Values <= 0 are floored to vmin_floor*max.
     """
     Zp = np.where(np.isfinite(Z) & (Z > 0), Z, np.nan)
-    zmax = np.nanmax(Zp)
+    zmax = float(vmax) if vmax is not None else np.nanmax(Zp)
     if not np.isfinite(zmax) or zmax <= 0:
         zmax = 1.0
-    floor = max(vmin_floor * zmax, 1e-300)
+    floor = max(float(vmin) if vmin is not None else vmin_floor * zmax, 1e-300)
     Zc = np.where(np.isnan(Zp), floor, np.maximum(Zp, floor))
-    levels = np.logspace(np.log10(floor), np.log10(zmax), n_levels)
+    levels = log_levels(floor, zmax, n_levels)
     cf = ax.contourf(x, y, Zc, levels=levels,
                      norm=mpl.colors.LogNorm(vmin=floor, vmax=zmax),
                      cmap=cmap, extend=extend)
@@ -78,6 +227,91 @@ def log_contourf(ax, x, y, Z, n_levels=20, cmap="magma", vmin_floor=1e-6,
         ax.set_yscale("log")
     return cf
 
+
+def panel_loglog(
+    ax,
+    f,
+    omega,
+    C,
+    vmin=None,
+    vmax=None,
+    n_levels=24,
+    cmap="magma",
+    f_min=0.1,
+    f_max=6.0,
+    omega_min=0.25,
+    omega_max=400.0,
+    *,
+    positive_only=False,
+    temporal_hz=False,
+    transpose=True,
+    extend="both",
+):
+    """Plot C with shape (Nf, Nomega) as a log-log contourf in (f, omega)."""
+    y = np.asarray(omega, dtype=float)
+    Z_source = np.asarray(C, dtype=float)
+    if positive_only:
+        mask, y = positive_frequency(y, temporal_hz=temporal_hz)
+        Z_source = Z_source[:, mask]
+    elif temporal_hz:
+        y = y / (2.0 * np.pi)
+
+    if vmin is None or vmax is None:
+        auto_vmin, auto_vmax = shared_lims([Z_source], floor=1e-6)
+        vmin = auto_vmin if vmin is None else vmin
+        vmax = auto_vmax if vmax is None else vmax
+
+    Z = Z_source.T if transpose else Z_source
+    Z = np.where(np.isfinite(Z) & (Z > 0), Z, vmin)
+    Z = np.maximum(Z, vmin)
+    levels = log_levels(vmin, vmax, n_levels)
+    cf = ax.contourf(
+        f, y, Z, levels=levels,
+        norm=mpl.colors.LogNorm(vmin=vmin, vmax=vmax),
+        cmap=cmap, extend=extend,
+    )
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    if f_min is not None and f_max is not None:
+        ax.set_xlim(f_min, f_max)
+    if omega_min is not None and omega_max is not None:
+        if temporal_hz:
+            omega_min = omega_min / (2.0 * np.pi)
+            omega_max = omega_max / (2.0 * np.pi)
+        ax.set_ylim(omega_min, omega_max)
+    return cf
+
+
+def panel_loglog_hz(
+    ax,
+    panel,
+    vmin=None,
+    vmax=None,
+    *,
+    n_levels=24,
+    cmap="magma",
+    overlay=None,
+):
+    """Plot a SpectrumPanel-like object on log f / log temporal-Hz axes."""
+    cf = panel_loglog(
+        ax,
+        panel.f,
+        panel.temporal_hz,
+        panel.C,
+        vmin,
+        vmax,
+        n_levels=n_levels,
+        cmap=cmap,
+        f_min=float(np.min(panel.f)),
+        f_max=float(np.max(panel.f)),
+        omega_min=float(np.min(panel.temporal_hz)),
+        omega_max=float(np.max(panel.temporal_hz)),
+    )
+    if overlay is not None:
+        curve = overlay(panel)
+        if curve is not None:
+            overlay_curve(ax, curve[0], curve[1])
+    return cf
 
 # ---------------------------------------------------------------------------
 # Integration weights for radial (f, ω) and 2D (k_x, k_y, ω) grids

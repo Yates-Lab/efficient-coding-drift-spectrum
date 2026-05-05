@@ -276,23 +276,19 @@ def saccade_template(t, peak_time=0.040, zeta=0.6):
     return out
 
 
-def saccade_redistribution(f, omega, A, lam=3.0):
-    """Backward-compatible alias for the Mostofi transient approximation.
-
-    ``lam`` is accepted for old call sites but ignored; saccade power is no
-    longer modeled as a stationary Poisson jump Lorentzian.
-    """
+def saccade_redistribution(f, omega, A):
+    """Alias for the Mostofi transient approximation."""
     return mostofi_saccade_redistribution(f, omega, A=A)
 
 
-def saccade_spectrum(f, omega, A, lam=3.0, beta=2.0, A_image=1.0, k0=0.05):
+def saccade_spectrum(f, omega, A, beta=2.0, A_image=1.0, k0=0.05):
     """Saccade-induced retinal input spectrum.
 
-        C_sac(f, ω; A, λ) = C_I(f) · Q_sac(f, ω; A, λ)
+        C_sac(f, ω; A) = C_I(f) · Q_sac(f, ω; A)
     """
     f_arr = np.atleast_1d(np.asarray(f, dtype=float)).ravel()
     C_I = image_spectrum(f_arr, beta=beta, A=A_image, k0=k0)
-    Q = saccade_redistribution(f_arr, omega, A, lam=lam)
+    Q = saccade_redistribution(f_arr, omega, A)
     return C_I[:, None] * Q
 
 
@@ -504,12 +500,9 @@ class SeparableMovieSpectrum(Spectrum):
 class SaccadeSpectrum(Spectrum):
     """Mostofi et al. 2020 analytic saccade-transient approximation.
 
-    Amplitude A is in degrees or the same spatial unit as f.  ``lam`` remains
-    as an ignored compatibility field for older scripts; this spectrum is the
-    cumulative-Gaussian-smoothed step approximation, not a Poisson jump process.
+    Amplitude A is in degrees or the same spatial unit as f.
     """
     A: float = 2.5
-    lam: float = 0.0
     duration_divisor: float = 8.0
     omega_floor: float = 1e-15
     image: ImageParams = DEFAULT_IMAGE

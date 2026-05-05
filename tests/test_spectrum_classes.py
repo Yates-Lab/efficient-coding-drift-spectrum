@@ -50,9 +50,9 @@ def test_drift_class_matches_free_function():
 def test_saccade_class_matches_free_function():
     f = np.geomspace(0.05, 5.0, 50)
     omega = np.linspace(-100, 100, 401)
-    s = SaccadeSpectrum(A=2.5, lam=3.0)
+    s = SaccadeSpectrum(A=2.5)
     np.testing.assert_allclose(
-        s.C(f, omega), saccade_spectrum(f, omega, A=2.5, lam=3.0), rtol=1e-12
+        s.C(f, omega), saccade_spectrum(f, omega, A=2.5), rtol=1e-12
     )
 
 

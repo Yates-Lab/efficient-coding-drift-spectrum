@@ -1,7 +1,7 @@
 """Shared band/grid parameters used across figures.
 
 The band parameters are biologically motivated approximations:
-  f_max  = 4   cycles/unit  (upper spatial frequency cells respond to)
+  f_max  = 6   cycles/deg  (upper spatial frequency cells respond to)
   ω_min  = 0.5 rad/s ≈  0.08 Hz   (slow temporal cutoff)
   ω_max  = 400 rad/s ≈ 64    Hz   (fast temporal cutoff; matches the upper
                                     end of primate retinal ganglion temporal

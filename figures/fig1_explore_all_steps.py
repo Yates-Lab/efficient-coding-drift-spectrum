@@ -48,13 +48,13 @@ setup_style()
 #%%
 # Editable plotting parameters. Change these, then rerun the downstream cells.
 F_MIN, F_MAX = 0.1, 10.0
-OMEGA_MIN, OMEGA_MAX = 0.25, 400.0
+OMEGA_MIN, OMEGA_MAX = 0.1, 400.0
 N_F, N_OMEGA = 200, 200
 CMAP = "magma"
 N_LEVELS = 24
 FLOOR = 1e-6
 
-DRIFT_DS = [0.05, 0.5, 2.0, 10.0, 50.0]
+DRIFT_DS = [0.005, 0.05, 0.5, 1, 2.0]
 SACCADE_AS = [0.5, 1.0, 2.0, 4.0, 8.0]
 
 SAVE_FIGS = True
@@ -349,10 +349,11 @@ plt.legend()
 # xscale log
 plt.xscale('log')
 
-#%%
+#%% Plot kernels in the space and time domain
+
 
 
     
 
     
-# %%
+#%% Approximate Non-stationary Oracle with cell classes with localized bandwidth

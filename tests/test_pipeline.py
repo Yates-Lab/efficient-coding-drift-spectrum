@@ -9,8 +9,8 @@ import sys
 sys.path.insert(0, ".")
 
 from src.spectra import (
-    DriftSpectrum, SaccadeSpectrum, BoiCycleLateSpectrum,
-    BoiCycleEarlySpectrum,
+    DriftSpectrum,
+    SaccadeSpectrum,
 )
 from src.pipeline import (
     SolveConfig,
@@ -54,16 +54,8 @@ def test_run_unknown_grid_raises():
         run(DriftSpectrum(), grid="bogus")
 
 
-def test_run_boi_late_matches_drift():
-    """BoiCycleLate and DriftSpectrum must produce identical I* (same C)."""
-    r_drift = run(DriftSpectrum(D=2.0), grid="fast")
-    r_late = run(BoiCycleLateSpectrum(D=2.0), grid="fast")
-    np.testing.assert_allclose(r_late.I, r_drift.I, rtol=1e-12)
-    np.testing.assert_allclose(r_late.v_sq, r_drift.v_sq, rtol=1e-12)
-
-
-def test_run_saccade_mostofi_spectrum_is_finite():
-    """Cross-check the Mostofi saccade approximation across the pipeline boundary."""
+def test_run_saccade_spectrum_is_finite():
+    """Cross-check the saccade approximation across the pipeline boundary."""
     r_sac = run(SaccadeSpectrum(A=2.5), grid="fast")
     assert np.isfinite(r_sac.I) and r_sac.I > 0
     assert np.all(np.isfinite(r_sac.C))
@@ -124,15 +116,13 @@ def test_kernel_slice_helpers_return_curves():
     assert np.all(np.isfinite(temporal_v))
 
 
-def test_pipeline_magno_parvo_ordering_in_boi_cycle():
-    """The early-fixation regime should have a peak spatial frequency at
-    LOWER f than the late-fixation regime — this is the magno/parvo
-    qualitative prediction."""
-    r_late = run(BoiCycleLateSpectrum(D=2.0), grid="hi_res")
-    r_early = run(BoiCycleEarlySpectrum(A=4.4, T_win=0.150), grid="hi_res")
-    extract_temporal_kernel(r_late)
-    extract_temporal_kernel(r_early)
-    assert r_early.f_peak < r_late.f_peak, (
-        f"Early regime peak f={r_early.f_peak:.3f} should be < "
-        f"late regime peak f={r_late.f_peak:.3f}"
+def test_pipeline_saccade_drift_peak_ordering():
+    """Saccade and drift conditions should remain qualitatively distinct."""
+    r_drift = run(DriftSpectrum(D=0.0375), grid="hi_res")
+    r_saccade = run(SaccadeSpectrum(A=4.4), grid="hi_res")
+    extract_temporal_kernel(r_drift)
+    extract_temporal_kernel(r_saccade)
+    assert r_saccade.f_peak < r_drift.f_peak, (
+        f"Saccade peak f={r_saccade.f_peak:.3f} should be < "
+        f"drift peak f={r_drift.f_peak:.3f}"
     )

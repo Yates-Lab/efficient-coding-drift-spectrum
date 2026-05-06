@@ -189,7 +189,7 @@ def main():
     _heatmap(J_star, D_values, A_values, outdir / "fig_strategy_J_star.png", "Oracle landscape", r"$J^*$")
     _heatmap(regret, D_values, A_values, outdir / "fig_strategy_regret.png", "Localized-class regret", r"$(J^*-J_K)/J^*$")
     _heatmap(retune_gain, D_values, A_values, outdir / "fig_strategy_retune_gain.png", "Bounded-retuning gain", r"$(J_K^+-J_K)/J^*$")
-    _heatmap(rho_qc[:, :, 0, 0], D_values, A_values, outdir / "fig_strategy_share_modulation.png", "Early-epoch class 0 share", r"$\rho_{early,0}$")
+    _heatmap(rho_qc[:, :, 0, 0], D_values, A_values, outdir / "fig_strategy_share_modulation.png", "Saccade condition class 0 share", r"$\rho_{saccade,0}$")
 
     j_ref = int(np.argmin(np.abs(D_values - args.ref_D)))
     fig, ax = plt.subplots(figsize=(4.6, 3.0), constrained_layout=True)
@@ -197,7 +197,7 @@ def main():
         ax.plot(A_values, delta_qc[j_ref, :, 0, c], marker="o", label=f"class {c}")
     ax.set_xscale("log")
     ax.set_xlabel("saccade amplitude A (deg)")
-    ax.set_ylabel(r"early log-gain $\delta_{qc}$")
+    ax.set_ylabel(r"saccade log-gain $\delta_{qc}$")
     ax.set_title(f"Prediction slice at D={D_values[j_ref]:g}")
     ax.legend()
     fig.savefig(outdir / "fig_strategy_delta_slice.png", dpi=180)

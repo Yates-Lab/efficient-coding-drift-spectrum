@@ -10,9 +10,9 @@ import numpy as np
 from src.cell_class_figures import log_additive_separability_r2
 from src.params import F_MAX, OMEGA_MIN, OMEGA_MAX
 from src.plotting import band_mask_radial, radial_weights
-from src.rucci_cycle_spectra import brownian_drift_Q, temporal_power_integral
 from src.spectra import (
     DEFAULT_IMAGE,
+    DriftSpectrum,
     SeparableMovieSpectrum,
     separable_movie_spectrum,
     temporal_lorentzian,
@@ -43,11 +43,11 @@ def test_separable_movie_class_matches_free_function():
     np.testing.assert_allclose(s.C(f, omega), expected, rtol=1e-12)
 
 
-def test_brownian_drift_Q_uses_cycles_aware_width():
+def test_drift_spectrum_uses_cycles_aware_width():
     f = np.array([0.5, 1.0, 2.0])
     D = 0.0375
     omega = np.linspace(-1000.0, 1000.0, 20001)
-    Q = brownian_drift_Q(f, omega, D)
+    Q = DriftSpectrum(D=D).redistribution(f, omega)
     # At omega=a, Lorentzian falls to exactly half of its value at zero.
     a = D * (2.0 * np.pi * f) ** 2
     for i, ai in enumerate(a):
@@ -61,8 +61,8 @@ def test_story_spectrum_set_includes_separable_control():
     keys = [s.key for s in specs]
     assert keys[0] == "separable_stationary"
     assert "dong_atick_linear" in keys
-    assert "cycle_early" in keys
-    assert "cycle_late" in keys
+    assert "saccade_A_4.4" in keys
+    assert "drift_D_0.0375" in keys
 
     named = get_spectrum_set("stationary_vs_active_story")
     assert [s.key for s in named] == keys

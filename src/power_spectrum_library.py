@@ -18,9 +18,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Callable, Dict, Optional, Sequence
 
-import numpy as np
-
-from src.rucci_cycle_spectra import make_figure7_rucci_cycle_spectra, spectra_as_wrappers
 from src.spectra import (
     DriftSpectrum,
     SaccadeSpectrum,
@@ -30,9 +27,7 @@ from src.spectra import (
 
 DEFAULT_DRIFT_SWEEP = (0.05, 0.5, 2.0, 10.0, 50.0)
 DEFAULT_SACCADE_SWEEP = (0.5, 1.0, 2.0, 4.0, 8.0)
-DEFAULT_EQUIVALENT_CASES = (0.3, 2.5, 7.0)
 DEFAULT_SEPARABLE_OMEGA0 = 0.05
-TWOPI = 2.0 * np.pi
 
 
 @dataclass(frozen=True)
@@ -88,7 +83,7 @@ def saccade_spectrum_specs(
     *,
     color: Optional[str] = None,
 ) -> list[SpectrumSpec]:
-    """Mostofi analytic saccade-transient spectra for a sweep over amplitude ``A``."""
+    """Analytic saccade-transient spectra for a sweep over amplitude ``A``."""
     return [
         SpectrumSpec(
             key=f"saccade_A_{A:g}",
@@ -98,7 +93,7 @@ def saccade_spectrum_specs(
             family="saccade",
             parameters=_params(A=A),
             color=color,
-            reference="Mostofi et al. 2020 analytic approximation",
+            reference="cumulative-Gaussian saccade approximation",
         )
         for A in A_values
     ]
@@ -156,10 +151,9 @@ def stationary_vs_active_story_specs() -> list[SpectrumSpec]:
     """Core comparison set for the narrative figure.
 
     This intentionally contrasts: (i) a stationary separable approximation,
-    (ii) the Dong--Atick linear-motion control, and (iii) the analytic
-    early/late fixation selector.
+    (ii) the Dong--Atick linear-motion control, (iii) the analytic saccade
+    transient, and (iv) analytic Brownian drift.
     """
-    cycle_specs = cycle_spectrum_specs(use_modulated_early=True)
     return [
         SpectrumSpec(
             key="separable_stationary",
@@ -181,36 +175,55 @@ def stationary_vs_active_story_specs() -> list[SpectrumSpec]:
             color="tab:blue",
             reference="Dong & Atick 1995",
         ),
-        cycle_specs[0],
-        cycle_specs[1],
+        SpectrumSpec(
+            key="saccade_A_4.4",
+            label=r"saccade $A=4.4^\circ$",
+            title="Saccade transient",
+            spectrum=SaccadeSpectrum(A=4.4),
+            family="saccade",
+            parameters=_params(A=4.4),
+            color="tab:red",
+            reference="cumulative-Gaussian saccade approximation",
+        ),
+        SpectrumSpec(
+            key="drift_D_0.0375",
+            label=r"drift $D=0.0375$",
+            title="Brownian drift",
+            spectrum=DriftSpectrum(D=0.0375),
+            family="drift",
+            parameters=_params(D=0.0375),
+            color="tab:purple",
+            reference="Kuang et al. 2012",
+        ),
     ]
 
 
-def cycle_spectrum_specs(*, use_modulated_early: bool = True) -> list[SpectrumSpec]:
-    """Canonical early/late fixation selector: saccade transient vs drift."""
-    early, late = cycle_solver_spectra(use_modulated_early=use_modulated_early)
+def saccade_drift_pair_specs(
+    *,
+    A: float = 4.4,
+    D: float = 0.0375,
+) -> list[SpectrumSpec]:
+    """Simple two-condition movement pair: saccade transient and drift."""
     return [
         SpectrumSpec(
-            key="cycle_early",
-            label="early cycle (Mostofi saccade)",
-            title="Early fixation",
-            spectrum=early,
-            family="fixation_cycle",
-            parameters=_params(cycle_phase=0.0),
+            key=f"saccade_A_{A:g}",
+            label=rf"saccade $A={A:g}^\circ$",
+            title="Saccade",
+            spectrum=SaccadeSpectrum(A=float(A)),
+            family="saccade",
+            parameters=_params(A=A),
             color="tab:red",
-            reference="Mostofi et al. 2020 analytic approximation",
-            notes="Selector state: saccade transient.",
+            reference="cumulative-Gaussian saccade approximation",
         ),
         SpectrumSpec(
-            key="cycle_late",
-            label="late cycle (drift)",
-            title="Late fixation",
-            spectrum=late,
-            family="fixation_cycle",
-            parameters=_params(cycle_phase=1.0),
+            key=f"drift_D_{D:g}",
+            label=rf"drift $D={D:g}$",
+            title="Drift",
+            spectrum=DriftSpectrum(D=float(D)),
+            family="drift",
+            parameters=_params(D=D),
             color="tab:purple",
             reference="Kuang et al. 2012 analytic drift",
-            notes="Selector state: Brownian drift.",
         ),
     ]
 
@@ -239,9 +252,10 @@ def spectrum_comparison_spec_objects(*, include_controls: bool = True) -> list[S
                 color="tab:orange",
             ),
         ])
-    cycle_specs = cycle_spectrum_specs(use_modulated_early=True)
-    # Preserve the legacy Q1 display order: late-cycle control, then early.
-    specs.extend([cycle_specs[1], cycle_specs[0]])
+    specs.extend([
+        *linear_motion_spectrum_specs([1.0], color="tab:green"),
+        *separable_movie_spectrum_specs([DEFAULT_SEPARABLE_OMEGA0], color="tab:gray"),
+    ])
     return specs
 
 
@@ -251,19 +265,19 @@ SPECTRUM_SETS: Dict[str, Callable[..., list[SpectrumSpec]]] = {
     "linear_motion_sweep": linear_motion_spectrum_specs,
     "separable_movie": separable_movie_spectrum_specs,
     "stationary_vs_active_story": stationary_vs_active_story_specs,
-    "cycle_early_late": cycle_spectrum_specs,
-    "comparison_controls_and_cycle": spectrum_comparison_spec_objects,
+    "saccade_drift_pair": saccade_drift_pair_specs,
+    "comparison_core": spectrum_comparison_spec_objects,
 }
 
 
 SPECTRUM_SET_DESCRIPTIONS = {
     "drift_sweep": "Brownian drift spectra parameterized by D.",
-    "saccade_sweep": "Mostofi analytic saccade-transient spectra parameterized by A.",
+    "saccade_sweep": "Analytic saccade-transient spectra parameterized by A.",
     "linear_motion_sweep": "Gaussian linear-motion spectra parameterized by s.",
     "separable_movie": "Stationary separable C_I(f) Q_T(omega) controls.",
-    "stationary_vs_active_story": "Separable control, Dong--Atick linear motion, and analytic early/late selector spectra.",
-    "cycle_early_late": "Canonical early/late selector: Mostofi saccade and Brownian drift.",
-    "comparison_controls_and_cycle": "Drift, Mostofi saccade, and selector controls.",
+    "stationary_vs_active_story": "Separable control, Dong--Atick linear motion, saccade, and drift spectra.",
+    "saccade_drift_pair": "Two-condition pair: saccade and Brownian drift.",
+    "comparison_core": "Drift, saccade, Dong--Atick linear, and separable controls.",
 }
 
 
@@ -278,7 +292,7 @@ def get_spectrum_set(name: str, **kwargs) -> list[SpectrumSpec]:
     Examples
     --------
     get_spectrum_set("drift_sweep", D_values=np.geomspace(0.01, 200, 25))
-    get_spectrum_set("cycle_early_late")
+    get_spectrum_set("saccade_drift_pair")
     """
     try:
         factory = SPECTRUM_SETS[name]
@@ -286,26 +300,6 @@ def get_spectrum_set(name: str, **kwargs) -> list[SpectrumSpec]:
         available = ", ".join(sorted(SPECTRUM_SETS))
         raise ValueError(f"Unknown spectrum set {name!r}. Available: {available}") from exc
     return factory(**kwargs)
-
-
-def canonical_positive_cycle_view():
-    """Return the Figure 7 cycle and its positive temporal-frequency grid."""
-    cycle = make_figure7_rucci_cycle_spectra()
-    pos = cycle.omega > 0
-    omega = cycle.omega[pos]
-    temporal_hz = omega / TWOPI
-    return cycle, cycle.f, omega, temporal_hz
-
-
-def cycle_solver_spectra(*, use_modulated_early: bool = True):
-    """Return canonical Figure 7 spectra for filter reconstruction.
-
-    All early/late Rucci-cycle filter and kernel figures should use this helper
-    so the solver inputs and the Figure 1b/1c display panels are tied to the
-    same cached Figure 7 cycle object.
-    """
-    cycle = make_figure7_rucci_cycle_spectra()
-    return spectra_as_wrappers(cycle, use_modulated_early=use_modulated_early)
 
 
 def spectrum_comparison_specs(*, include_controls: bool = True):
@@ -320,17 +314,14 @@ __all__ = [
     "SpectrumSpec",
     "DEFAULT_DRIFT_SWEEP",
     "DEFAULT_SACCADE_SWEEP",
-    "DEFAULT_EQUIVALENT_CASES",
     "drift_spectrum_specs",
     "saccade_spectrum_specs",
     "linear_motion_spectrum_specs",
     "separable_movie_spectrum_specs",
     "stationary_vs_active_story_specs",
-    "cycle_spectrum_specs",
+    "saccade_drift_pair_specs",
     "spectrum_comparison_spec_objects",
     "list_spectrum_sets",
     "get_spectrum_set",
-    "canonical_positive_cycle_view",
-    "cycle_solver_spectra",
     "spectrum_comparison_specs",
 ]

@@ -1,8 +1,7 @@
 """Figure 6b: diagnostic plot of the saccade redistribution kernel and
 spectrum.
 
-Sanity-check that Q_sac(f, ω; A) and C_sac = C_I · Q_sac behave as
-predicted by Mostofi et al. (2020):
+Sanity-check that Q_sac(f, ω; A) and C_sac = C_I · Q_sac behave as expected:
   - At low f, Q ∝ f^2 (whitening regime)
   - At high f, Q saturates (saturation regime)
   - Crossover frequency ~ 1/(2A), i.e. shifts left as A increases

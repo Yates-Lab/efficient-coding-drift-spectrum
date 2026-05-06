@@ -1,10 +1,4 @@
-"""Compatibility wrapper for the production cell-class learning command.
-
-The only supported cell-learning condition stack is the canonical Figure 7
-Rucci/Boi early/late cycle. This wrapper exists for old shell history; it
-delegates to ``scripts/run_cell_class_learning.py`` and exposes no alternate
-movement-spectrum path.
-"""
+"""Compatibility wrapper for the production cell-class learning command."""
 
 from __future__ import annotations
 

@@ -3,7 +3,7 @@
 This script asks whether the number of useful reusable classes changes with the
 input-noise floor. It reuses the same movement-condition stack and repeats the
 oracle + K-class fits for each sigma_in. The default condition stack is the
-canonical Figure 7 Rucci/Boi early/late cycle split.
+direct saccade / Brownian drift pair.
 
 Example
 -------

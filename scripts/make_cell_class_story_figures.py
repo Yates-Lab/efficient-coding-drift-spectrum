@@ -11,7 +11,7 @@ from the production patch. Run the learning script first, then:
 Figures generated
 -----------------
 fig_cellclass_01_spectra_and_oracles
-    Representative early/late spectra and the fully adaptive oracle filters.
+    Representative saccade/drift spectra and the fully adaptive oracle filters.
 fig_cellclass_02_log_separability
     Nonseparability metric for input spectra and oracle filters.
 fig_cellclass_03_regret_and_allocation
@@ -74,26 +74,29 @@ def savefig(fig, outdir: Path, stem: str):
 
 
 def condition_labels(rows):
-    return [r["name"].replace("early_", "early\n").replace("late_", "late\n") for r in rows]
+    return [
+        r["name"].replace("saccade_", "saccade\n").replace("drift_", "drift\n")
+        for r in rows
+    ]
 
 
 def condition_title(row):
     name = row["name"]
-    if name == "early_cycle":
-        return "early: C = I(f) Q_saccade"
-    if name == "late_cycle":
-        return "late: C = I(f) Q_drift"
+    if name.startswith("saccade_"):
+        return "saccade: C = I(f) Q_saccade"
+    if name.startswith("drift_"):
+        return "drift: C = I(f) Q_drift"
     return name.replace("_", " ")
 
 
 def representative_indices(rows):
-    early = [i for i, r in enumerate(rows) if r["epoch"] == "early"]
-    late = [i for i, r in enumerate(rows) if r["epoch"] == "late"]
+    saccade = [i for i, r in enumerate(rows) if r["epoch"] == "saccade"]
+    drift = [i for i, r in enumerate(rows) if r["epoch"] == "drift"]
     idx = []
-    if early:
-        idx.extend([early[0], early[-1]])
-    if late:
-        idx.extend([late[0], late[-1]])
+    if saccade:
+        idx.extend([saccade[0], saccade[-1]])
+    if drift:
+        idx.extend([drift[0], drift[-1]])
     # Preserve order while removing duplicates.
     out = []
     for i in idx:

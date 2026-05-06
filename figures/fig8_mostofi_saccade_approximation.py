@@ -17,9 +17,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from src.spectra import (
-    mostofi_saccade_amplitude_average,
+    DriftSpectrum,
+    saccade_amplitude_average,
 )
-from src.rucci_cycle_spectra import brownian_drift_Q
 from src.plotting import setup_style
 
 setup_style()
@@ -40,7 +40,7 @@ def kelly_temporal_weight(f_hz, k_cpd):
 def amplitude_bin_Q(k_cpd, f_hz, A_low, A_high, n_amp=31):
     amps = np.linspace(A_low, A_high, n_amp) if A_high > A_low else np.array([A_low])
     omega = 2.0 * np.pi * np.asarray(f_hz, dtype=float)
-    return mostofi_saccade_amplitude_average(k_cpd, omega, amps).T
+    return saccade_amplitude_average(k_cpd, omega, amps).T
 
 
 def fig8():
@@ -74,7 +74,7 @@ def fig8():
     omega_int = 2.0 * np.pi * f_int
     for label, bounds in amp_bins:
         if bounds is None:
-            Q = brownian_drift_Q(k, omega_int, D_deg2_s=0.035).T
+            Q = DriftSpectrum(D=0.035).redistribution(k, omega_int).T
             S = 0.055 * Q * I_k[None, :]
         else:
             Q = amplitude_bin_Q(k, f_int, bounds[0], bounds[1], n_amp=31)

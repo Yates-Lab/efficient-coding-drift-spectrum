@@ -34,16 +34,10 @@ from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 import numpy as np
 
-from src.params import F_MAX, OMEGA_MIN, OMEGA_MAX, fast_grid, hi_res_grid
+from src.params import F_MAX, OMEGA_MIN, OMEGA_MAX
 from src.pipeline import Result, run
 from src.plotting import radial_weights, band_mask_radial
-from src.power_spectrum_library import cycle_solver_spectra
-from src.rucci_cycle_spectra import (
-    ArraySpectrum,
-    ImageParams as RucciImageParams,
-    image_spectrum as rucci_image_spectrum,
-)
-from src.spectra import BoiLateDriftApprox, mostofi_saccade_redistribution
+from src.spectra import DriftSpectrum, SaccadeSpectrum
 
 
 Array = np.ndarray
@@ -179,165 +173,115 @@ def response_power_budget(C_stack: Array, G_stack: Array, weights: Array, sigma_
 # ---------------------------------------------------------------------------
 
 
-def build_rucci_cycle_conditions(
+def build_saccade_drift_conditions(
     *,
-    early_weight: float = 0.5,
-    late_weight: float = 0.5,
-    use_modulated_early: bool = True,
+    saccade_weight: float = 0.5,
+    drift_weight: float = 0.5,
+    A: float = 4.4,
+    D: float = 0.0375,
 ) -> Tuple[List[Condition], Array]:
-    """Create the production early/late stack from the canonical Figure 7 spectra.
-
-    This is the cell-learning source of truth for the analytic fixation-cycle
-    question. It uses the same `C_early = I(f) Q_saccade` and
-    `C_late = I(f) Q_drift` ArraySpectrum wrappers that feed the Figure 6/Q1/Q3
-    filter reconstructions.
-    """
-    early, late = cycle_solver_spectra(use_modulated_early=use_modulated_early)
+    """Create the canonical two-condition stack from core spectrum objects."""
     conditions = [
         Condition(
-            name="early_cycle",
-            epoch="early",
-            parameter_name="cycle_phase",
-            parameter_value=0.0,
-            spectrum=early,
+            name=f"saccade_A_{float(A):g}",
+            epoch="saccade",
+            parameter_name="A",
+            parameter_value=float(A),
+            spectrum=SaccadeSpectrum(A=float(A)),
         ),
         Condition(
-            name="late_cycle",
-            epoch="late",
-            parameter_name="cycle_phase",
-            parameter_value=1.0,
-            spectrum=late,
+            name=f"drift_D_{float(D):g}",
+            epoch="drift",
+            parameter_name="D",
+            parameter_value=float(D),
+            spectrum=DriftSpectrum(D=float(D)),
         ),
     ]
-    pi = np.asarray([early_weight, late_weight], dtype=float)
+    pi = np.asarray([saccade_weight, drift_weight], dtype=float)
     if np.any(pi < 0) or pi.sum() <= 0:
-        raise ValueError("early_weight and late_weight must be nonnegative and sum positive")
+        raise ValueError("saccade_weight and drift_weight must be nonnegative and sum positive")
     pi = pi / pi.sum()
     return conditions, pi
 
 
 def build_cell_learning_conditions(
     *,
-    early_weight: float = 0.5,
-    late_weight: float = 0.5,
+    saccade_weight: float = 0.5,
+    drift_weight: float = 0.5,
+    A: float = 4.4,
+    D: float = 0.0375,
 ) -> Tuple[List[Condition], Array]:
-    """Build the canonical Figure 7 analytic condition stack."""
-    return build_rucci_cycle_conditions(
-        early_weight=early_weight,
-        late_weight=late_weight,
-        use_modulated_early=True,
+    """Build the default saccade/drift condition stack."""
+    return build_saccade_drift_conditions(
+        saccade_weight=saccade_weight,
+        drift_weight=drift_weight,
+        A=A,
+        D=D,
     )
-
-
-def _condition_grid(grid: str) -> Tuple[Array, Array]:
-    if grid == "fast":
-        return fast_grid()
-    if grid == "hi_res":
-        return hi_res_grid()
-    raise ValueError("grid must be 'fast' or 'hi_res'")
-
-
-def _fixed_amplitude_saccade_spectrum(
-    A: float,
-    *,
-    grid: str,
-    n_saccades: int,
-    n_orientations: int,
-    T_win_s: float,
-    seed: int,
-) -> ArraySpectrum:
-    """Build one early-fixation fixed-amplitude Mostofi saccade spectrum.
-
-    The spectrum is precomputed on the requested solver grid and wrapped as an
-    ``ArraySpectrum`` so the optimizer does not regenerate analytic spectra
-    during every oracle solve.
-    """
-    f, omega = _condition_grid(grid)
-    image_params = RucciImageParams(beta=2.0, f0=0.03, high_cut_cpd=60.0)
-    Q = mostofi_saccade_redistribution(f, omega, A=float(A))
-    C = rucci_image_spectrum(f, image_params)[:, None] * Q
-    label = (
-        f"Mostofi early fixed-amplitude saccade "
-        f"(A={float(A):g} deg)"
-    )
-    return ArraySpectrum(f, omega, C, label, ignore_dc_for_interp=True)
 
 
 def build_named_cell_learning_conditions(
-    condition_set: str = "cycle_pair",
+    condition_set: str = "saccade_drift_pair",
     *,
-    early_weight: float = 0.5,
-    late_weight: float = 0.5,
-    use_modulated_early: bool = True,
+    saccade_weight: float = 0.5,
+    drift_weight: float = 0.5,
     grid: str = "fast",
-    early_A_values: Sequence[float] = (1.0, 2.0, 4.0, 6.0, 8.0),
-    late_D_values: Sequence[float] = (0.0375, 0.075, 0.15, 0.3, 0.6),
-    saccade_n_saccades: int = 32,
-    saccade_n_orientations: int = 12,
-    saccade_T_win_s: float = 0.150,
+    saccade_A_values: Sequence[float] = (1.0, 2.0, 4.0, 6.0, 8.0),
+    drift_D_values: Sequence[float] = (0.0375, 0.075, 0.15, 0.3, 0.6),
+    A: float = 4.4,
+    D: float = 0.0375,
 ) -> Tuple[List[Condition], Array]:
     """Build named condition stacks for cell-class learning scripts.
 
-    ``cycle_pair`` is the canonical two-condition analytic selector.  The
-    ``movement_sweep`` stack is the nontrivial class-learning experiment: five
-    early fixed-amplitude saccade spectra plus five late Brownian-drift spectra
-    using the cycles-aware width ``D * (2*pi*f)^2``.
+    ``saccade_drift_pair`` is the canonical two-condition stack. The
+    ``movement_sweep`` stack contains a sweep of saccade amplitudes and drift
+    diffusion coefficients, all represented by the same core Spectrum classes.
     """
     name = str(condition_set).lower()
-    if name in {"cycle_pair", "cycle_early_late", "default"}:
-        return build_rucci_cycle_conditions(
-            early_weight=early_weight,
-            late_weight=late_weight,
-            use_modulated_early=use_modulated_early,
+    if name in {"saccade_drift_pair", "default"}:
+        return build_saccade_drift_conditions(
+            saccade_weight=saccade_weight,
+            drift_weight=drift_weight,
+            A=A,
+            D=D,
         )
     if name != "movement_sweep":
-        raise ValueError("condition_set must be 'cycle_pair' or 'movement_sweep'")
+        raise ValueError("condition_set must be 'saccade_drift_pair' or 'movement_sweep'")
 
-    early_A = tuple(float(v) for v in early_A_values)
-    late_D = tuple(float(v) for v in late_D_values)
-    if not early_A:
-        raise ValueError("early_A_values must contain at least one value")
-    if not late_D:
-        raise ValueError("late_D_values must contain at least one value")
-    if int(saccade_n_saccades) < 1:
-        raise ValueError("saccade_n_saccades must be >= 1")
-    if int(saccade_n_orientations) < 1:
-        raise ValueError("saccade_n_orientations must be >= 1")
-    if float(saccade_T_win_s) <= 0:
-        raise ValueError("saccade_T_win_s must be positive")
+    saccade_A = tuple(float(v) for v in saccade_A_values)
+    drift_D = tuple(float(v) for v in drift_D_values)
+    if not saccade_A:
+        raise ValueError("saccade_A_values must contain at least one value")
+    if not drift_D:
+        raise ValueError("drift_D_values must contain at least one value")
+    if grid not in {"fast", "hi_res"}:
+        raise ValueError("grid must be 'fast' or 'hi_res'")
 
     conditions: List[Condition] = []
-    for i, A in enumerate(early_A):
+    for A_value in saccade_A:
         conditions.append(
             Condition(
-                name=f"early_A_{A:g}",
-                epoch="early",
+                name=f"saccade_A_{A_value:g}",
+                epoch="saccade",
                 parameter_name="A",
-                parameter_value=A,
-                spectrum=_fixed_amplitude_saccade_spectrum(
-                    A,
-                    grid=grid,
-                    n_saccades=saccade_n_saccades,
-                    n_orientations=saccade_n_orientations,
-                    T_win_s=saccade_T_win_s,
-                    seed=1234 + i,
-                ),
+                parameter_value=A_value,
+                spectrum=SaccadeSpectrum(A=A_value),
             )
         )
-    for D in late_D:
+    for D_value in drift_D:
         conditions.append(
             Condition(
-                name=f"late_D_{D:g}",
-                epoch="late",
+                name=f"drift_D_{D_value:g}",
+                epoch="drift",
                 parameter_name="D",
-                parameter_value=D,
-                spectrum=BoiLateDriftApprox(D=D, f_is_cycles=True),
+                parameter_value=D_value,
+                spectrum=DriftSpectrum(D=D_value),
             )
         )
 
     pi = np.concatenate([
-        np.full(len(early_A), float(early_weight) / len(early_A), dtype=float),
-        np.full(len(late_D), float(late_weight) / len(late_D), dtype=float),
+        np.full(len(saccade_A), float(saccade_weight) / len(saccade_A), dtype=float),
+        np.full(len(drift_D), float(drift_weight) / len(drift_D), dtype=float),
     ])
     pi = normalize_condition_weights(pi, len(conditions))
     return conditions, pi

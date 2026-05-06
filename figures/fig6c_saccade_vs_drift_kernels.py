@@ -1,9 +1,7 @@
 """Figure 6c: saccade-vs-drift kernel comparison.
 
-The fixation-cycle model is a selector: early fixation uses the Mostofi
-analytic saccade transient and late fixation uses Brownian drift.  This figure
-compares their resulting kernels without invoking the old equivalent-drift
-Poisson-saccade construction.
+This figure compares the core analytic saccade transient with analytic Brownian
+drift, without invoking equivalent-drift or trace-based constructions.
 """
 
 from __future__ import annotations
@@ -81,7 +79,7 @@ def fig6c():
         ax_t.legend(loc="best", fontsize=7, frameon=False)
 
     fig.suptitle(
-        "Mostofi saccade transients versus Brownian drift selector states",
+        "Saccade transients versus Brownian drift",
         y=0.97, fontsize=10,
     )
 

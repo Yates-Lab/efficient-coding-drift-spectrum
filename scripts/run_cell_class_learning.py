@@ -1,13 +1,12 @@
-"""Run information-aware cell-class learning on early/late movement spectra.
+"""Run information-aware cell-class learning on saccade/drift movement spectra.
 
 Run from the repository root:
 
     pip install torch
     python scripts/run_cell_class_learning.py --grid fast --kmax 4
 
-The script defaults to the canonical Figure 7 Rucci/Boi early/late spectra,
-solves the existing one-filter oracle for each, then fits K=1..Kmax reusable
-class spectra.
+The script defaults to a direct saccade/drift pair, solves the existing
+one-filter oracle for each, then fits K=1..Kmax reusable class spectra.
 The production default uses the fast optimizer from ``src.cell_class_learning_fast``;
 pass ``--optimizer reference`` for the original slower float64 optimizer.
 """
@@ -132,18 +131,15 @@ def main():
     parser.add_argument("--sigma-out", type=float, default=2.0)
     parser.add_argument("--P0", type=float, default=50.0)
     parser.add_argument("--kmax", type=int, default=6)
-    parser.add_argument("--condition-set", type=str, default="cycle_pair",
-                        choices=("cycle_pair", "movement_sweep"),
-                        help="cycle_pair is the canonical early/late pair; movement_sweep is 5 saccades + 5 drifts")
-    parser.add_argument("--early-A-values", type=str, default="1,2,4,6,8",
+    parser.add_argument("--condition-set", type=str, default="saccade_drift_pair",
+                        choices=("saccade_drift_pair", "movement_sweep"),
+                        help="saccade_drift_pair is the two-condition default; movement_sweep is 5 saccades + 5 drifts")
+    parser.add_argument("--saccade-A-values", type=str, default="1,2,4,6,8",
                         help="comma-separated saccade amplitudes for movement_sweep")
-    parser.add_argument("--late-D-values", type=str, default="0.0375,0.075,0.15,0.3,0.6",
-                        help="comma-separated cycles-aware drift D values for movement_sweep")
-    parser.add_argument("--early-weight", type=float, default=0.5)
-    parser.add_argument("--late-weight", type=float, default=0.5)
-    parser.add_argument("--n-saccades", type=int, default=32)
-    parser.add_argument("--n-orientations", type=int, default=12)
-    parser.add_argument("--saccade-window", type=float, default=0.150)
+    parser.add_argument("--drift-D-values", type=str, default="0.0375,0.075,0.15,0.3,0.6",
+                        help="comma-separated drift D values for movement_sweep")
+    parser.add_argument("--saccade-weight", type=float, default=0.5)
+    parser.add_argument("--drift-weight", type=float, default=0.5)
     parser.add_argument("--optimizer", type=str, default="fast",
                         choices=("fast", "reference"),
                         help="fast is the production default; reference is the original optimizer")
@@ -213,20 +209,16 @@ def main():
         conditions, pi = build_named_cell_learning_conditions(
             "movement_sweep",
             grid=args.grid,
-            early_A_values=_parse_float_list(args.early_A_values),
-            late_D_values=_parse_float_list(args.late_D_values),
-            early_weight=args.early_weight,
-            late_weight=args.late_weight,
-            saccade_n_saccades=args.n_saccades,
-            saccade_n_orientations=args.n_orientations,
-            saccade_T_win_s=args.saccade_window,
+            saccade_A_values=_parse_float_list(args.saccade_A_values),
+            drift_D_values=_parse_float_list(args.drift_D_values),
+            saccade_weight=args.saccade_weight,
+            drift_weight=args.drift_weight,
         )
     else:
         conditions, pi = build_named_cell_learning_conditions(
-            "cycle_pair",
-            early_weight=args.early_weight,
-            late_weight=args.late_weight,
-            use_modulated_early=True,
+            "saccade_drift_pair",
+            saccade_weight=args.saccade_weight,
+            drift_weight=args.drift_weight,
         )
 
     print("Solving one-filter oracle stack...")

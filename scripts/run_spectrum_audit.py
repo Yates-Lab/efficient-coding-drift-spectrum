@@ -29,8 +29,7 @@ from src.cell_class_figures import log_additive_separability_r2, normalize_for_p
 from src.params import F_MAX, OMEGA_MIN, OMEGA_MAX, fast_grid
 from src.plotting import radial_weights, band_mask_radial, log_contourf, setup_style
 from src.power_spectrum_library import stationary_vs_active_story_specs
-from src.rucci_cycle_spectra import brownian_drift_Q, temporal_power_integral
-from src.spectra import BoiLateDriftApprox
+from src.spectra import DriftSpectrum
 from src.spectrum_diagnostics import temporal_centroid_log_slope
 
 TWOPI = 2.0 * np.pi
@@ -69,8 +68,8 @@ def audit_brownian_drift(D: float, outdir: Path) -> dict:
     f = np.geomspace(0.5, 5.0, 50)
     omega_max = 2500.0
     omega = np.linspace(-omega_max, omega_max, 200001)
-    Q = brownian_drift_Q(f, omega, D)
-    integral = temporal_power_integral(Q, omega)
+    Q = DriftSpectrum(D=D).redistribution(f, omega)
+    integral = np.trapz(Q, omega, axis=1) / TWOPI
 
     hw = np.array([measured_halfwidth(omega, Q[i]) for i in range(f.size)])
     theory = D * (TWOPI * f) ** 2

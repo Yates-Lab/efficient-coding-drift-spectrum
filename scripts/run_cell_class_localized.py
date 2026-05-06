@@ -109,9 +109,9 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--outdir", type=str, default="outputs/cell_classes_localized")
     parser.add_argument("--grid", type=str, default="fast", choices=("fast", "hi_res"))
-    parser.add_argument("--condition-set", type=str, default="movement_sweep", choices=("cycle_pair", "movement_sweep"))
-    parser.add_argument("--early-A-values", type=str, default="1,2,4,6,8")
-    parser.add_argument("--late-D-values", type=str, default="0.0375,0.075,0.15,0.3,0.6")
+    parser.add_argument("--condition-set", type=str, default="movement_sweep", choices=("saccade_drift_pair", "movement_sweep"))
+    parser.add_argument("--saccade-A-values", type=str, default="1,2,4,6,8")
+    parser.add_argument("--drift-D-values", type=str, default="0.0375,0.075,0.15,0.3,0.6")
     parser.add_argument("--sigma-in", type=float, default=0.3)
     parser.add_argument("--sigma-out", type=float, default=1.0)
     parser.add_argument("--P0", type=float, default=50.0)
@@ -137,11 +137,11 @@ def main():
         conditions, pi = build_named_cell_learning_conditions(
             "movement_sweep",
             grid=args.grid,
-            early_A_values=_parse_float_list(args.early_A_values),
-            late_D_values=_parse_float_list(args.late_D_values),
+            saccade_A_values=_parse_float_list(args.saccade_A_values),
+            drift_D_values=_parse_float_list(args.drift_D_values),
         )
     else:
-        conditions, pi = build_named_cell_learning_conditions("cycle_pair")
+        conditions, pi = build_named_cell_learning_conditions("saccade_drift_pair")
 
     oracle = solve_oracle_stack(
         conditions,
@@ -244,4 +244,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

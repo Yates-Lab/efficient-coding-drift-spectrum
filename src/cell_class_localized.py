@@ -30,13 +30,7 @@ from src.cell_class_learning_fast import (
     oracle_initialization,
 )
 from src.kernels import radial_cross_section, spatial_kernel_2d
-from src.power_spectrum_library import canonical_positive_cycle_view
-from src.rucci_cycle_spectra import (
-    ArraySpectrum,
-    ImageParams as RucciImageParams,
-    image_spectrum as rucci_image_spectrum,
-)
-from src.spectra import BoiLateDriftApprox, mostofi_saccade_redistribution
+from src.spectra import DriftSpectrum, SaccadeSpectrum
 
 Array = np.ndarray
 
@@ -637,33 +631,27 @@ def build_strategy_conditions(
     D: float,
     A: float,
     grid: str = "fast",
-    early_weight: float = 0.5,
-    late_weight: float = 0.5,
+    saccade_weight: float = 0.5,
+    drift_weight: float = 0.5,
 ) -> Tuple[List[Condition], Array]:
-    """Build an explicit early-saccade/late-drift strategy pair."""
-    cycle, _, _, _ = canonical_positive_cycle_view()
-    f_grid, omega_grid = cycle.f, cycle.omega
-    if grid != "fast":
-        from src.params import hi_res_grid
-
-        f_grid, omega_grid = hi_res_grid()
-    image_params = RucciImageParams(beta=2.0, f0=0.03, high_cut_cpd=60.0)
-    C_early = rucci_image_spectrum(f_grid, image_params)[:, None] * mostofi_saccade_redistribution(f_grid, omega_grid, A=float(A))
+    """Build an explicit saccade/drift strategy pair."""
+    if grid not in {"fast", "hi_res"}:
+        raise ValueError("grid must be 'fast' or 'hi_res'")
     conditions = [
         Condition(
-            name=f"early_A_{float(A):g}",
-            epoch="early",
+            name=f"saccade_A_{float(A):g}",
+            epoch="saccade",
             parameter_name="A",
             parameter_value=float(A),
-            spectrum=ArraySpectrum(f_grid, omega_grid, C_early, f"strategy early A={float(A):g}", ignore_dc_for_interp=True),
+            spectrum=SaccadeSpectrum(A=float(A)),
         ),
         Condition(
-            name=f"late_D_{float(D):g}",
-            epoch="late",
+            name=f"drift_D_{float(D):g}",
+            epoch="drift",
             parameter_name="D",
             parameter_value=float(D),
-            spectrum=BoiLateDriftApprox(D=float(D), f_is_cycles=True),
+            spectrum=DriftSpectrum(D=float(D)),
         ),
     ]
-    pi = normalize_condition_weights(np.asarray([early_weight, late_weight], dtype=float), 2)
+    pi = normalize_condition_weights(np.asarray([saccade_weight, drift_weight], dtype=float), 2)
     return conditions, pi

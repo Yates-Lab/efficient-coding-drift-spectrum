@@ -82,7 +82,6 @@ if not args.skip_figures:
         "figures/fig6_saccade_kernels.py",
         "figures/fig6b_saccade_diagnostics.py",
         "figures/fig6c_saccade_vs_drift_kernels.py",
-        "figures/fig7_rucci_cycle_spectra.py",
         "figures/fig8_mostofi_saccade_approximation.py",
         "figures/figQ1_spectrum_library.py",
         "figures/figQ2_information_sweeps.py",

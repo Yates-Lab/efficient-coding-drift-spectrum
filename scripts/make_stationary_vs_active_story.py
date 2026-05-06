@@ -1,9 +1,8 @@
 """Make narrative figures contrasting old stationary controls with active sensing.
 
 The figure uses the shared spectrum library and the shared efficient-coding
-pipeline.  It adds the missing separable stationary control and places it next
-to: (i) the Dong--Atick linear-motion control, and (ii) the Rucci/Boi early and
-late cycle spectra.
+pipeline. It places the separable stationary control next to the Dong--Atick
+linear-motion control, the saccade approximation, and Brownian drift.
 
 Run from the repository root:
 

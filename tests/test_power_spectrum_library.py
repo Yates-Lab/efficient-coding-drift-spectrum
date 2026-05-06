@@ -7,61 +7,27 @@ sys.path.insert(0, ".")
 
 from pathlib import Path
 
-import numpy as np
-
 from src.power_spectrum_library import (
-    cycle_solver_spectra,
     drift_spectrum_specs,
     get_spectrum_set,
     list_spectrum_sets,
+    saccade_drift_pair_specs,
     spectrum_comparison_specs,
     spectrum_comparison_spec_objects,
 )
-from src.rucci_cycle_spectra import make_figure7_rucci_cycle_spectra
 
 
-def test_cycle_solver_spectra_are_figure7_arrays():
-    cycle = make_figure7_rucci_cycle_spectra()
-    early, late = cycle_solver_spectra(use_modulated_early=True)
-    nonzero = cycle.omega != 0.0
-
-    np.testing.assert_allclose(
-        early.C(cycle.f, cycle.omega)[:, nonzero],
-        cycle.C_early_mod[:, nonzero],
-        rtol=1e-12,
-    )
-    np.testing.assert_allclose(
-        late.C(cycle.f, cycle.omega)[:, nonzero],
-        cycle.C_late_total[:, nonzero],
-        rtol=1e-12,
-    )
-
-    late_eval = late.C(cycle.f, cycle.omega)
-    dc = cycle.omega == 0.0
-    assert np.nanmax(late_eval[:, dc]) <= np.nanmax(cycle.C_late_total[:, nonzero])
-
-
-def test_spectrum_comparison_specs_use_shared_cycle_solver_spectra():
-    cycle = make_figure7_rucci_cycle_spectra()
-    specs = spectrum_comparison_specs(include_controls=False)
-    by_label = {label: spec for label, spec, _ in specs}
-    nonzero = cycle.omega != 0.0
-
-    np.testing.assert_allclose(
-        by_label["early cycle (Mostofi saccade)"].C(cycle.f, cycle.omega)[:, nonzero],
-        cycle.C_early_mod[:, nonzero],
-        rtol=1e-12,
-    )
-    np.testing.assert_allclose(
-        by_label["late cycle (drift)"].C(cycle.f, cycle.omega)[:, nonzero],
-        cycle.C_late_total[:, nonzero],
-        rtol=1e-12,
-    )
+def test_saccade_drift_pair_uses_core_spectrum_classes():
+    specs = saccade_drift_pair_specs(A=4.4, D=0.0375)
+    assert [s.family for s in specs] == ["saccade", "drift"]
+    assert [s.parameters for s in specs] == [{"A": 4.4}, {"D": 0.0375}]
+    assert [s.spectrum.name for s in specs] == ["saccade", "drift"]
 
 
 def test_named_spectrum_sets_return_readable_specs():
     available = list_spectrum_sets()
     assert "drift_sweep" in available
+    assert "saccade_drift_pair" in available
 
     specs = get_spectrum_set("drift_sweep", D_values=[0.5, 2.0])
     assert [s.key for s in specs] == ["drift_D_0.5", "drift_D_2"]
@@ -85,18 +51,18 @@ def test_direct_spec_factories_are_plain_to_extend():
     assert specs[0].title == r"$D = 1$"
 
 
-def test_cycle_reconstruction_figures_use_shared_spectrum_entrypoints():
+def test_figure_scripts_use_shared_spectrum_entrypoints():
     root = Path(__file__).resolve().parents[1]
     expected = {
-        "figures/fig6_saccade_kernels.py": "cycle_solver_spectra",
         "figures/fig6c_saccade_vs_drift_kernels.py": "saccade_spectrum_specs",
-        "figures/figQ3_magno_parvo.py": "cycle_solver_spectra",
         "figures/figQ1_spectrum_library.py": "spectrum_comparison_specs",
     }
     forbidden = {
-        "figure7_cycle_wrappers",
-        "make_figure7_rucci_cycle_spectra",
-        "make_rucci_cycle_spectra",
+        "cycle_" + "solver_spectra",
+        "canonical_" + "positive_cycle_view",
+        "make_figure7_" + "ru" + "cci_cycle_spectra",
+        "make_" + "ru" + "cci_cycle_spectra",
+        "src." + "ru" + "cci_cycle_spectra",
     }
 
     for relpath, shared_entrypoint in expected.items():

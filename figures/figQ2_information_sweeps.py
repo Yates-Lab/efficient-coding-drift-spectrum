@@ -7,7 +7,7 @@ Three panels:
       at large D the cell loses high-f content because power moves out
       of band. There's an optimal D.
   (b) I*(s) for the Dong-Atick linear-motion approximation.
-  (c) I*(A) for the Mostofi analytic saccade approximation.
+  (c) I*(A) for the analytic saccade approximation.
   (d) A head-to-head comparison of the four supported spectrum families.
 """
 
@@ -89,7 +89,7 @@ def fig_q2():
     ax.grid(True, alpha=0.3, which="both")
 
     # --------------------------------------------------------------------
-    # (c) I*(A) for the Mostofi saccade approximation.
+    # (c) I*(A) for the saccade approximation.
     # --------------------------------------------------------------------
     ax = axes[1, 0]
     print("Panel (c): I*(A) saccade only")
@@ -106,7 +106,7 @@ def fig_q2():
         print(f"  sigma_in={sin}: I* range [{min(I_vals):.3f}, {max(I_vals):.3f}]")
     ax.set_xlabel(r"$A$ (deg)")
     ax.set_ylabel(r"$I^*$ (nats)")
-    ax.set_title(r"(c) Mostofi saccade: $I^*(A)$")
+    ax.set_title(r"(c) saccade: $I^*(A)$")
     ax.legend(fontsize=7)
     ax.grid(True, alpha=0.3, which="both")
 

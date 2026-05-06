@@ -35,12 +35,17 @@ from src.spectra import (
 
 from src.plotting import (
     add_log_colorbar,
+    band_mask_radial,
     panel_loglog,
+    parameter_palette,
     radial_log_grid,
+    radial_weights,
     setup_style,
     shared_lims,
 )
-from src.pipeline import solve_on_grid
+from src.pipeline import solve_on_grid, spatial_kernel_slice
+from src.kernels import minimum_phase_temporal_filter, soft_band_taper
+from src.cell_class_localized import fit_cell_classes_localized
 
 setup_style()
 %matplotlib inline
@@ -317,31 +322,35 @@ fig, axes = plot_panels(
     colorbar_label=r"$|v^*|^2 / \max_\mathrm{set}\,|v^*|^2$",
 )
 
+filter_results = results
+filter_labels = labels
+filter_spectra = spectra
+filter_C_list = C_list
+
 # %%
 DRIFT_DS = np.geomspace(.005, 500, 25)
 P0 = 10.0
 sigma_out = 2.0
 
 
-spectra = [(f'Drift (D={D})' ,DriftSpectrum(D=D)) for D in DRIFT_DS]
+sweep_spectra = [(f'Drift (D={D})' ,DriftSpectrum(D=D)) for D in DRIFT_DS]
 
 for sigma_in in [0.1, 0.5, 1.0]:
 
-    results = [
-    solve_on_grid(
-        spec,
-        f,
-        omega,
-        sigma_in,
-        sigma_out,
-        P0,
-        band=(F_MAX, OMEGA_MIN, OMEGA_MAX),
-    )
-    
-    for _, spec in spectra
+    sweep_results = [
+        solve_on_grid(
+            spec,
+            f,
+            omega,
+            sigma_in,
+            sigma_out,
+            P0,
+            band=(F_MAX, OMEGA_MIN, OMEGA_MAX),
+        )
+        for _, spec in sweep_spectra
     ]
 
-    I = np.array([r.I for r in results])
+    I = np.array([r.I for r in sweep_results])
     h = plt.plot(DRIFT_DS, I/I.max(), label=f'$\sigma_\mathrm{{in}}={sigma_in}$')
     plt.plot(DRIFT_DS[np.where(I==I.max())[0][0]], 1.0, 'o', color=h[0].get_color()) 
 
@@ -350,10 +359,168 @@ plt.legend()
 plt.xscale('log')
 
 #%% Plot kernels in the space and time domain
+KERNEL_F_SLICES = [0.15, 0.5, 1.5, 4.0]      # cycles/degree
+KERNEL_TF_HZ_SLICES = [1.0, 4.0, 16.0, 32.0] # Hz
+KERNEL_TIME_MAX = 0.35
+KERNEL_SPACE_MAX = 8.0
+KERNEL_N_OMEGA = 2048
+KERNEL_TAPER_ALPHA = 0.25
+KERNEL_FLOOR_REL = 1e-3
 
 
+def temporal_kernel_at_f(result, f0):
+    """Minimum-phase temporal kernel at the spatial bin nearest ``f0``.
 
-    
+    The display grid above is positive and log-spaced, while minimum-phase
+    reconstruction wants a centered uniform omega grid.  For inspection we
+    interpolate the positive-frequency magnitude onto a symmetric uniform grid.
+    """
+    i_f = int(np.argmin(np.abs(result.f - float(f0))))
+    v_mag_pos = np.sqrt(np.maximum(result.v_sq[i_f], 0.0))
 
-    
+    omega_max = min(float(result.omega.max()), float(OMEGA_MAX))
+    domega = 2.0 * omega_max / int(KERNEL_N_OMEGA)
+    omega_centered = (np.arange(int(KERNEL_N_OMEGA)) - int(KERNEL_N_OMEGA) // 2) * domega
+    v_mag = np.interp(
+        np.abs(omega_centered),
+        result.omega,
+        v_mag_pos,
+        left=v_mag_pos[0],
+        right=0.0,
+    )
+    taper = soft_band_taper(
+        omega_centered,
+        OMEGA_MIN,
+        omega_max,
+        alpha=KERNEL_TAPER_ALPHA,
+    )
+    floor = KERNEL_FLOOR_REL * max(float(np.nanmax(v_mag * taper)), 1e-30)
+    v_mag = np.maximum(v_mag * taper, floor)
+    t, h, _ = minimum_phase_temporal_filter(v_mag, omega_centered)
+    return t, h
+
+
+def normalize_curve(y):
+    denom = max(float(np.nanmax(np.abs(y))), 1e-30)
+    return y / denom
+
+
+colors = parameter_palette(len(filter_results), cmap="tab20", lo=0.02, hi=0.98)
+fig, axes = plt.subplots(
+    2,
+    max(len(KERNEL_F_SLICES), len(KERNEL_TF_HZ_SLICES)),
+    figsize=(3.0 * max(len(KERNEL_F_SLICES), len(KERNEL_TF_HZ_SLICES)), 5.6),
+    squeeze=False,
+    gridspec_kw={"hspace": 0.42, "wspace": 0.30},
+)
+
+for ax, f0 in zip(axes[0], KERNEL_F_SLICES):
+    for result, label, color in zip(filter_results, filter_labels, colors):
+        t, h = temporal_kernel_at_f(result, f0)
+        ax.plot(t, normalize_curve(h), color=color, label=label)
+    ax.set_xlim(0.0, KERNEL_TIME_MAX)
+    ax.axhline(0.0, color="0.75", lw=0.5)
+    ax.set_title(rf"temporal kernel at $f={f0:g}$")
+    ax.set_xlabel(r"$t$ (s)")
+    ax.set_ylabel(r"$v_t(t)$ / max")
+
+for ax, tf_hz in zip(axes[1], KERNEL_TF_HZ_SLICES):
+    omega0 = 2.0 * np.pi * float(tf_hz)
+    for result, label, color in zip(filter_results, filter_labels, colors):
+        r, v = spatial_kernel_slice(result, omega0=omega0)
+        ax.plot(r, normalize_curve(v), color=color, label=label)
+    ax.set_xlim(-KERNEL_SPACE_MAX, KERNEL_SPACE_MAX)
+    ax.axhline(0.0, color="0.75", lw=0.5)
+    ax.axvline(0.0, color="0.85", lw=0.5)
+    ax.set_title(rf"spatial kernel at {tf_hz:g} Hz")
+    ax.set_xlabel(r"$r$ (deg)")
+    ax.set_ylabel(r"$v_s(r)$ / max")
+
+for ax in axes[0, len(KERNEL_F_SLICES):]:
+    ax.set_visible(False)
+for ax in axes[1, len(KERNEL_TF_HZ_SLICES):]:
+    ax.set_visible(False)
+
+axes[0, 0].legend(loc="best", fontsize=6.5, ncol=1)
+fig.suptitle("Kernel slices from the optimal filters", y=0.995, fontsize=11)
+_ = save_and_display(fig, "fig1e_kernel_slices.png")
+
+
 #%% Approximate Non-stationary Oracle with cell classes with localized bandwidth
+K_CLASSES = 3
+LOC_WEIGHT = 0.5
+DELTA_MAX = 0.5
+LEARN_BASELINE_SHARE = True
+RETUNE_CLASSES = False
+CELL_N_STEPS = 600
+CELL_N_RESTARTS = 1
+CELL_LR = 5e-2
+CELL_DEVICE = "auto"
+CELL_DTYPE = "float32"
+
+oracle_C_stack = np.stack([r.C for r in filter_results], axis=0)
+oracle_G_stack = np.stack([r.v_sq for r in filter_results], axis=0)
+oracle_weights = radial_weights(f, omega) * band_mask_radial(
+    f,
+    omega,
+    F_MAX,
+    OMEGA_MIN,
+    OMEGA_MAX,
+)
+condition_weights = np.ones(len(filter_results), dtype=float) / len(filter_results)
+
+cell_fit = fit_cell_classes_localized(
+    oracle_C_stack,
+    oracle_weights,
+    f,
+    sigma_in=filter_results[0].sigma_in,
+    sigma_out=filter_results[0].sigma_out,
+    P0=filter_results[0].P0,
+    K=K_CLASSES,
+    condition_weights=condition_weights,
+    G_star=oracle_G_stack,
+    loc_weight=LOC_WEIGHT,
+    delta_max=DELTA_MAX,
+    learn_baseline_share=LEARN_BASELINE_SHARE,
+    retune=RETUNE_CLASSES,
+    n_steps=CELL_N_STEPS,
+    n_restarts=CELL_N_RESTARTS,
+    lr=CELL_LR,
+    device=CELL_DEVICE,
+    dtype=CELL_DTYPE,
+    seed=1,
+    check_every=25,
+)
+
+oracle_I = np.array([r.I for r in filter_results], dtype=float)
+oracle_J = float(np.sum(condition_weights * oracle_I))
+regret = (oracle_J - cell_fit.J) / max(abs(oracle_J), 1e-300)
+print(f"Oracle J*: {oracle_J:.4g}")
+print(f"K={K_CLASSES} localized-cell J: {cell_fit.J:.4g}")
+print(f"Relative regret: {100 * regret:.2f}%")
+print("Baseline class shares:", np.round(cell_fit.rho0, 3))
+print("Class f centroids:", np.round(cell_fit.f_centroid_cpd, 3))
+
+fig, axes = plot_panels(
+    f,
+    omega,
+    [cell_fit.H[k] for k in range(K_CLASSES)],
+    [f"class {k + 1}" for k in range(K_CLASSES)],
+    filename="fig1f_cell_classes.png",
+    title=rf"Localized cell classes, $K={K_CLASSES}$",
+    cmap="viridis",
+    colorbar_label=r"$H_c(f,\omega) / \max_c H_c$",
+)
+
+fig, axes = plot_panels(
+    f,
+    omega,
+    list(cell_fit.G),
+    filter_labels,
+    filename="fig1g_cell_class_filters.png",
+    title=rf"Cell-class approximation to oracle filters, $K={K_CLASSES}$",
+    cmap="viridis",
+    colorbar_label=r"$G_q(f,\omega) / \max_q G_q$",
+)
+
+# %%

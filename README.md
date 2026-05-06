@@ -8,7 +8,7 @@ generates the figure and diagnostic artifacts in `outputs/`.
 The main code path is:
 
 1. Define an input spectrum `C_theta(f, omega)` with a `Spectrum.C(f, omega)`
-   object from `src/spectra.py` or `src/rucci_cycle_spectra.py`.
+   object from `src/spectra.py`.
 2. Solve the Linsker/Jun efficient-coding problem with `src/solver.py`, usually
    through the shared pipeline in `src/pipeline.py`.
 3. Optionally reconstruct spatial and temporal kernels with `src/kernels.py`.
@@ -35,13 +35,13 @@ The solver uses the closed-form KKT solution with bisection on the dual
 variable lambda. The integration band is controlled by `src/params.py`:
 
 ```text
-F_MAX = 6.0 cyc/unit
+F_MAX = 6.0 cycles/deg
 OMEGA_MIN = 0.5 rad/s
 OMEGA_MAX = 400.0 rad/s
 ```
 
 The solver grids currently sample spatial frequencies from `0.05` to `5.0`
-cyc/unit. The `hi_res` grid uses `220 x 2048` samples; the `fast` grid uses
+cycles/deg. The `hi_res` grid uses `220 x 2048` samples; the `fast` grid uses
 `120 x 1024` samples.
 
 ## Repository Layout
@@ -49,10 +49,8 @@ cyc/unit. The `hi_res` grid uses `220 x 2048` samples; the `fast` grid uses
 ```text
 src/
   spectra.py                  Spectrum API plus static image, Brownian drift,
-                              Mostofi saccade, Dong-Atick linear motion, and
+                              saccade, Dong-Atick linear motion, and
                               separable stationary controls
-  rucci_cycle_spectra.py      Canonical analytic early/late fixation-cycle
-                              spectra used by the cycle figures and cell fits
   power_spectrum_library.py   Named SpectrumSpec collections shared by figures,
                               scripts, and cell-class condition builders
   solver.py                   Closed-form optimal-filter solver and information
@@ -147,7 +145,6 @@ Useful `run_all.py` flags:
 ```text
 figures/fig1_power_spectra.py
   outputs/fig1a_main.png
-  outputs/fig1b_boi_cycle.png
   outputs/fig1c_library.png
 
 figures/fig2_optimal_filter.py
@@ -171,9 +168,6 @@ figures/fig6b_saccade_diagnostics.py
 figures/fig6c_saccade_vs_drift_kernels.py
   outputs/fig6c_saccade_vs_drift_kernels.png
 
-figures/fig7_rucci_cycle_spectra.py
-  outputs/fig7_rucci_cycle_spectra.png
-
 figures/fig8_mostofi_saccade_approximation.py
   outputs/fig8_mostofi_saccade_approximation.png
 
@@ -187,14 +181,10 @@ figures/figQ3_magno_parvo.py
   outputs/figQ3_magno_parvo.png
 ```
 
-The canonical early/late fixation-cycle spectra are generated once by
-`make_figure7_rucci_cycle_spectra()` and reused through
-`src.power_spectrum_library`. Use `cycle_solver_spectra()` for solver inputs
-and `cycle_decomposition_panels()` for display panels. This keeps the cycle
-figures and the cell-class condition stack tied to the same cycle object.
-`spectrum_library_panels()` is the separate Figure 1c collection: Brownian
-drift (`D=1`), saccade (`A=3`), Dong-Atick separable approximation, and
-Dong-Atick linear velocity spread.
+The standard figures use the same core spectrum objects as the interactive
+scripts: `DriftSpectrum`, `SaccadeSpectrum`, `SeparableMovieSpectrum`, and
+`LinearMotionSpectrum`. Figure panels are constructed directly on the grid used
+by that script.
 
 ## Common Workflows
 
@@ -219,7 +209,7 @@ python scripts/make_stationary_vs_active_story.py \
   --outdir outputs/stationary_vs_active_story
 ```
 
-Run the default cell-class fit on the canonical early/late cycle pair:
+Run the default cell-class fit on the canonical saccade/drift pair:
 
 ```bash
 python scripts/run_cell_class_learning.py \
@@ -332,8 +322,8 @@ New analyses should define spectra once and reuse the shared pipeline.
 4. Run the specs with `src.pipeline.run_many(...)`, or convert them to
    cell-class conditions with `conditions_from_spectrum_specs(...)`.
 
-Avoid rebuilding grids, masks, solver calls, or cycle spectra inside figure
-scripts when a shared entry point already exists.
+Avoid rebuilding grids, masks, or solver calls inside figure scripts when a
+shared entry point already exists.
 
 ## Cell-Class Model
 
@@ -349,26 +339,26 @@ and rescales it so every condition spends the same response-power budget `P0`.
 The objective is the same Gaussian mutual information used by the oracle
 efficient-coding solver, not a squared-error fit to the oracle filters.
 
-The default condition stack is the canonical Figure 7 pair:
+The default condition stack is the direct saccade/drift pair:
 
 ```text
-early_cycle = I(f) Q_saccade
-late_cycle  = I(f) Q_drift
+saccade_A_4.4  = I(f) Q_saccade(A=4.4 deg)
+drift_D_0.0375 = I(f) Q_drift(D=0.0375 deg^2/s)
 ```
 
-`--condition-set movement_sweep` instead fits five early fixed-amplitude
-Mostofi saccade spectra and five late Brownian-drift spectra.
+`--condition-set movement_sweep` instead fits five saccade amplitudes and five
+Brownian-drift diffusion values.
 
 ## Tests
 
-The current test suite collects 52 tests:
+The current test suite covers the core solver, spectra, plotting registry, and
+cell-class condition builders:
 
 ```text
 tests/test_cell_class_conditions.py
 tests/test_constrained_gain_learning.py
 tests/test_pipeline.py
 tests/test_power_spectrum_library.py
-tests/test_rucci_cycle_spectra.py
 tests/test_separable_stationary_control.py
 tests/test_spectrum_classes.py
 ```
@@ -378,9 +368,12 @@ so the Torch-specific tests are skipped when Torch is not installed.
 
 ## Numerical Conventions
 
-- Spatial frequency `f` is radial frequency in cycles per unit length.
+- Spatial frequency `f` is radial frequency in cycles/degree.
 - Temporal frequency `omega` is angular frequency in rad/s; Hz is
   `omega / (2*pi)`.
+- Brownian drift `D` is in deg^2/s and enters as `D * (2*pi*f)^2`.
+- Saccade amplitude `A` is in degrees and enters as `2*pi*f*A`.
+- Linear velocity scale `s` is in deg/s and enters as `2*pi*f*s`.
 - Radial integration uses the 2D spatial measure collapsed into `f df d omega`.
 - The temporal grid is centered and uniform; kernel reconstruction uses
   `ifftshift` before FFT operations where needed.

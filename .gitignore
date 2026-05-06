@@ -3,3 +3,4 @@ outputs/*
 *.npz
 .DS_Store
 *.DS_Store
+figures/outputs/*

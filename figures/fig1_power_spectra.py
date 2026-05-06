@@ -270,7 +270,7 @@ fig, axes = plot_panels(
 #%% Choose efficient-coding parameters
 sigma_in = 0.2
 sigma_out = 2.0
-P0 = 50.0
+P0 = 5.0
 
 
 row_drift = [(f'Drift (D={D})' ,DriftSpectrum(D=D)) for D in DRIFT_DS]
@@ -317,4 +317,42 @@ fig, axes = plot_panels(
     colorbar_label=r"$|v^*|^2 / \max_\mathrm{set}\,|v^*|^2$",
 )
 
+# %%
+DRIFT_DS = np.geomspace(.005, 500, 25)
+P0 = 10.0
+sigma_out = 2.0
+
+
+spectra = [(f'Drift (D={D})' ,DriftSpectrum(D=D)) for D in DRIFT_DS]
+
+for sigma_in in [0.1, 0.5, 1.0]:
+
+    results = [
+    solve_on_grid(
+        spec,
+        f,
+        omega,
+        sigma_in,
+        sigma_out,
+        P0,
+        band=(F_MAX, OMEGA_MIN, OMEGA_MAX),
+    )
+    
+    for _, spec in spectra
+    ]
+
+    I = np.array([r.I for r in results])
+    h = plt.plot(DRIFT_DS, I/I.max(), label=f'$\sigma_\mathrm{{in}}={sigma_in}$')
+    plt.plot(DRIFT_DS[np.where(I==I.max())[0][0]], 1.0, 'o', color=h[0].get_color()) 
+
+plt.legend()
+# xscale log
+plt.xscale('log')
+
+#%%
+
+
+    
+
+    
 # %%

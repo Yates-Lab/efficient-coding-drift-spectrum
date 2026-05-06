@@ -27,15 +27,20 @@ sys.path.insert(0, ".")
 
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib as mpl
 
 from src.spectra import (
     saccade_redistribution,
     saccade_spectrum,
     drift_spectrum,
-    image_spectrum,
 )
-from src.plotting import setup_style, parameter_palette
+from src.plotting import (
+    add_band_edges,
+    add_log_colorbar,
+    panel_loglog,
+    parameter_palette,
+    setup_style,
+    shared_lims,
+)
 from src.params import F_MAX, OMEGA_MIN, OMEGA_MAX, hi_res_grid
 
 setup_style()
@@ -59,35 +64,31 @@ def fig6b():
 
     # ---------- Row 1: 2D Q for three amplitudes ----------
     Q_panels = [saccade_redistribution(f, omega, A=A) for A in A_panels]
-    # Use one global vmin/vmax so panels are comparable
-    all_vals = np.concatenate([Q.flatten() for Q in Q_panels])
-    all_vals = all_vals[all_vals > 0]
-    vmax_Q = all_vals.max()
-    vmin_Q = vmax_Q * 1e-5
+    vmin_Q, vmax_Q = shared_lims(Q_panels, floor=1e-5)
 
     cmap = "viridis"
-    levels = np.geomspace(vmin_Q, vmax_Q, 24)
 
     for col, (A, Q) in enumerate(zip(A_panels, Q_panels)):
         ax = fig.add_subplot(gs[0, col])
-        Q_disp = np.maximum(Q, vmin_Q)
-        ax.contourf(
-            f, omega_pos, Q_disp[:, i_pos].T,
-            levels=levels,
-            norm=mpl.colors.LogNorm(vmin=vmin_Q, vmax=vmax_Q),
-            cmap=cmap, extend="both",
+        panel_loglog(
+            ax,
+            f,
+            omega,
+            Q,
+            vmin_Q,
+            vmax_Q,
+            n_levels=24,
+            cmap=cmap,
+            f_min=f.min(),
+            f_max=f.max(),
+            omega_min=omega_pos.min(),
+            omega_max=omega_pos.max(),
+            positive_only=True,
         )
-        ax.set_xscale("log")
-        ax.set_yscale("log")
-        ax.set_xlim(f.min(), f.max())
-        ax.set_ylim(omega_pos.min(), omega.max())
         # Predicted crossover f_c = 1/(2A)
         f_c = 1.0 / (2.0 * A)
         ax.axvline(f_c, color="white", lw=0.8, ls="--", alpha=0.7)
-        # Band edges
-        ax.axvline(F_MAX, color="white", lw=0.5, ls=":", alpha=0.6)
-        ax.axhline(OMEGA_MIN, color="white", lw=0.5, ls=":", alpha=0.6)
-        ax.axhline(OMEGA_MAX, color="white", lw=0.5, ls=":", alpha=0.6)
+        add_band_edges(ax, f_max=F_MAX, omega_min=OMEGA_MIN, omega_max=OMEGA_MAX)
         ax.set_title(
             rf"$A = {A:g}^\circ$,  predicted $f_c = 1/(2A) = {f_c:.2g}$",
             pad=2, fontsize=8.5,
@@ -97,16 +98,16 @@ def fig6b():
             ax.set_ylabel(r"$\omega$ (rad/s)")
 
     # Add colorbar at the right of row 1
-    cbar_ax = fig.add_axes([0.945, 0.69, 0.012, 0.22])
-    cb = mpl.colorbar.ColorbarBase(
-        cbar_ax,
-        cmap=plt.get_cmap(cmap),
-        norm=mpl.colors.LogNorm(vmin=vmin_Q, vmax=vmax_Q),
-        orientation="vertical",
-        extend="min",
+    cb = add_log_colorbar(
+        fig,
+        [0.945, 0.69, 0.012, 0.22],
+        cmap=cmap,
+        vmin=vmin_Q,
+        vmax=vmax_Q,
+        label=r"$Q_\mathrm{sac}(f,\omega;A)$  [s$^2$]",
+        tick_labelsize=6,
     )
-    cb.set_label(r"$Q_\mathrm{sac}(f,\omega;A)$  [s$^2$]", fontsize=8)
-    cb.ax.tick_params(labelsize=6)
+    cb.ax.yaxis.label.set_size(8)
 
     # ---------- Row 2 left: spatial profile at fixed omega ----------
     omega_target_Hz = 8.0
@@ -175,12 +176,7 @@ def fig6b():
     C_sac = saccade_spectrum(f, omega, A=A_compare)
     C_drift = drift_spectrum(F_grid, W_grid, D=D_compare, beta=2.0)
 
-    # Use shared color limits for comparability of shape
-    all_C = np.concatenate([C_sac.flatten(), C_drift.flatten()])
-    all_C = all_C[all_C > 0]
-    vmax_C = all_C.max()
-    vmin_C = vmax_C * 1e-5
-    levels_C = np.geomspace(vmin_C, vmax_C, 24)
+    vmin_C, vmax_C = shared_lims([C_sac, C_drift], floor=1e-5)
 
     cmap_C = "magma"
 
@@ -192,20 +188,22 @@ def fig6b():
 
     for col, (C, title) in enumerate(zip(spectra, titles)):
         ax = fig.add_subplot(gs[2, col])
-        C_disp = np.maximum(C, vmin_C)
-        ax.contourf(
-            f, omega_pos, C_disp[:, i_pos].T,
-            levels=levels_C,
-            norm=mpl.colors.LogNorm(vmin=vmin_C, vmax=vmax_C),
-            cmap=cmap_C, extend="both",
+        panel_loglog(
+            ax,
+            f,
+            omega,
+            C,
+            vmin_C,
+            vmax_C,
+            n_levels=24,
+            cmap=cmap_C,
+            f_min=f.min(),
+            f_max=f.max(),
+            omega_min=omega_pos.min(),
+            omega_max=omega_pos.max(),
+            positive_only=True,
         )
-        ax.set_xscale("log")
-        ax.set_yscale("log")
-        ax.set_xlim(f.min(), f.max())
-        ax.set_ylim(omega_pos.min(), omega.max())
-        ax.axvline(F_MAX, color="white", lw=0.5, ls=":", alpha=0.6)
-        ax.axhline(OMEGA_MIN, color="white", lw=0.5, ls=":", alpha=0.6)
-        ax.axhline(OMEGA_MAX, color="white", lw=0.5, ls=":", alpha=0.6)
+        add_band_edges(ax, f_max=F_MAX, omega_min=OMEGA_MIN, omega_max=OMEGA_MAX)
         ax.set_xlabel(r"$f$ (cyc/u)")
         ax.set_title(title, pad=2, fontsize=9)
         if col == 0:
@@ -263,16 +261,16 @@ def fig6b():
     ax.grid(True, which="major", alpha=0.3, lw=0.3)
 
     # Colorbar for row 3
-    cbar_ax = fig.add_axes([0.945, 0.07, 0.012, 0.22])
-    cb = mpl.colorbar.ColorbarBase(
-        cbar_ax,
-        cmap=plt.get_cmap(cmap_C),
-        norm=mpl.colors.LogNorm(vmin=vmin_C, vmax=vmax_C),
-        orientation="vertical",
-        extend="min",
+    cb = add_log_colorbar(
+        fig,
+        [0.945, 0.07, 0.012, 0.22],
+        cmap=cmap_C,
+        vmin=vmin_C,
+        vmax=vmax_C,
+        label=r"$C(f,\omega)$ (shared scale)",
+        tick_labelsize=6,
     )
-    cb.set_label(r"$C(f,\omega)$ (shared scale)", fontsize=8)
-    cb.ax.tick_params(labelsize=6)
+    cb.ax.yaxis.label.set_size(8)
 
     fig.suptitle(
         "Saccade redistribution kernel and spectrum: diagnostics",

@@ -41,6 +41,22 @@ def run_checked(cmd, *, label):
         sys.exit(1)
 
 
+def run_figure(path):
+    """Run a figure file, allowing IPython-style magic lines in scripts."""
+    bootstrap = (
+        "from pathlib import Path\n"
+        "import sys\n"
+        "path = Path(sys.argv[1])\n"
+        "source = '\\n'.join(\n"
+        "    line for line in path.read_text().splitlines()\n"
+        "    if not line.lstrip().startswith('%')\n"
+        ")\n"
+        "ns = {'__file__': str(path), '__name__': '__main__'}\n"
+        "exec(compile(source, str(path), 'exec'), ns)\n"
+    )
+    run_checked([sys.executable, "-c", bootstrap, path], label=path)
+
+
 if not args.skip_tests:
     print("=" * 60, flush=True)
     print("Running tests", flush=True)
@@ -72,7 +88,7 @@ if not args.skip_figures:
         "figures/figQ2_information_sweeps.py",
         "figures/figQ3_magno_parvo.py",
     ]:
-        run_checked([sys.executable, fig], label=fig)
+        run_figure(fig)
 
 if args.with_cell_learning:
     print("\n" + "=" * 60, flush=True)

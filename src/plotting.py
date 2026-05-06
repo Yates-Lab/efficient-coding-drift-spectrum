@@ -163,31 +163,6 @@ def add_band_edges(
         ax.axhline(omega_max, color=color, lw=lw, ls=ls, alpha=alpha)
 
 
-def overlay_curve(ax, x, y, *, color="white", lw=0.8, ls="-", alpha=0.6, **kwargs):
-    """Overlay a movement/crossover curve with the shared white panel style."""
-    return ax.plot(x, y, color=color, lw=lw, ls=ls, alpha=alpha, **kwargs)
-
-
-def overlay_drift(ax, f, D, *, temporal_hz=False, cycles=False, **kwargs):
-    """Overlay the Brownian drift crossover curve."""
-    f = np.asarray(f, dtype=float)
-    y = float(D) * f ** 2
-    if cycles:
-        y = float(D) * (2.0 * np.pi * f) ** 2
-    if temporal_hz:
-        y = y / (2.0 * np.pi)
-    return overlay_curve(ax, f, y, **kwargs)
-
-
-def overlay_linear(ax, f, s, *, temporal_hz=False, **kwargs):
-    """Overlay the linear-motion crossover curve."""
-    f = np.asarray(f, dtype=float)
-    y = float(s) * f
-    if temporal_hz:
-        y = y / (2.0 * np.pi)
-    return overlay_curve(ax, f, y, **kwargs)
-
-
 # ---------------------------------------------------------------------------
 # Log contour plots
 # ---------------------------------------------------------------------------
@@ -282,39 +257,8 @@ def panel_loglog(
     return cf
 
 
-def panel_loglog_hz(
-    ax,
-    panel,
-    vmin=None,
-    vmax=None,
-    *,
-    n_levels=24,
-    cmap="magma",
-    overlay=None,
-):
-    """Plot a SpectrumPanel-like object on log f / log temporal-Hz axes."""
-    cf = panel_loglog(
-        ax,
-        panel.f,
-        panel.temporal_hz,
-        panel.C,
-        vmin,
-        vmax,
-        n_levels=n_levels,
-        cmap=cmap,
-        f_min=float(np.min(panel.f)),
-        f_max=float(np.max(panel.f)),
-        omega_min=float(np.min(panel.temporal_hz)),
-        omega_max=float(np.max(panel.temporal_hz)),
-    )
-    if overlay is not None:
-        curve = overlay(panel)
-        if curve is not None:
-            overlay_curve(ax, curve[0], curve[1])
-    return cf
-
 # ---------------------------------------------------------------------------
-# Integration weights for radial (f, ω) and 2D (k_x, k_y, ω) grids
+# Integration weights for radial (f, omega) grids
 # ---------------------------------------------------------------------------
 
 def trapezoid_weights_1d(x):
@@ -340,36 +284,6 @@ def radial_weights(f, omega):
     ww = trapezoid_weights_1d(omega)
     W = (f * wf)[:, None] * ww[None, :] / (2.0 * np.pi) ** 2
     return W
-
-
-def cartesian_weights(kx, ky, omega):
-    """Weights for I = (1/(2π)^3) ∫ dk_x dk_y dω · g."""
-    wkx = trapezoid_weights_1d(np.asarray(kx, dtype=float))
-    wky = trapezoid_weights_1d(np.asarray(ky, dtype=float))
-    ww = trapezoid_weights_1d(np.asarray(omega, dtype=float))
-    W = wkx[:, None, None] * wky[None, :, None] * ww[None, None, :] / (2.0 * np.pi) ** 3
-    return W
-
-
-# ---------------------------------------------------------------------------
-# Default analysis grids
-# ---------------------------------------------------------------------------
-
-def default_radial_grid(n_f=192, f_min=0.02, f_max=8.0,
-                        n_omega=1024, omega_max=200.0):
-    """Default (f, ω) grid for efficient-coding analysis.
-
-    f is log-spaced (positive only), omega is linear and centered (uniform DFT
-    grid for min-phase reconstruction).
-    """
-    # f log-spaced
-    f = np.geomspace(f_min, f_max, n_f)
-    # omega centered, uniform, even N for FFT
-    if n_omega % 2:
-        n_omega += 1
-    domega = 2.0 * omega_max / n_omega
-    omega = (np.arange(n_omega) - n_omega // 2) * domega
-    return f, omega
 
 
 def band_mask_radial(f, omega, f_max, omega_min, omega_max):

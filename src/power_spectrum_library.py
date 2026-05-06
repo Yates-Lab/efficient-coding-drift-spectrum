@@ -9,22 +9,18 @@ This is the human-readable place to add new movement spectra.  The pattern is:
 
 Figure scripts should consume ``SpectrumSpec`` collections and then call the
 shared pipeline, rather than rebuilding spectra, grids, weights, and solver
-calls locally.  The older panel helpers remain below for display-specific
-Figure 1/7 views.
+calls locally. Display panels should be built directly in the figure script on
+the grid that script is using.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Callable, Dict, Optional, Sequence, Tuple
+from typing import Callable, Dict, Optional, Sequence
 
 import numpy as np
 
-from src.rucci_cycle_spectra import (
-    RucciCycleSpectra,
-    make_figure7_rucci_cycle_spectra,
-    spectra_as_wrappers,
-)
+from src.rucci_cycle_spectra import make_figure7_rucci_cycle_spectra, spectra_as_wrappers
 from src.spectra import (
     DriftSpectrum,
     SaccadeSpectrum,
@@ -32,13 +28,11 @@ from src.spectra import (
     SeparableMovieSpectrum,
 )
 
-TWOPI = 2.0 * np.pi
-
-
 DEFAULT_DRIFT_SWEEP = (0.05, 0.5, 2.0, 10.0, 50.0)
 DEFAULT_SACCADE_SWEEP = (0.5, 1.0, 2.0, 4.0, 8.0)
 DEFAULT_EQUIVALENT_CASES = (0.3, 2.5, 7.0)
 DEFAULT_SEPARABLE_OMEGA0 = 0.05
+TWOPI = 2.0 * np.pi
 
 
 @dataclass(frozen=True)
@@ -294,132 +288,13 @@ def get_spectrum_set(name: str, **kwargs) -> list[SpectrumSpec]:
     return factory(**kwargs)
 
 
-@dataclass(frozen=True)
-class SpectrumPanel:
-    """A prepared positive-temporal-frequency spectrum panel."""
-
-    key: str
-    title: str
-    f: np.ndarray
-    omega: np.ndarray
-    temporal_hz: np.ndarray
-    C: np.ndarray
-    overlay_kind: Optional[str] = None
-    overlay_param: Optional[float] = None
-
-
-def canonical_positive_cycle_view() -> Tuple[RucciCycleSpectra, np.ndarray, np.ndarray, np.ndarray]:
+def canonical_positive_cycle_view():
     """Return the Figure 7 cycle and its positive temporal-frequency grid."""
     cycle = make_figure7_rucci_cycle_spectra()
     pos = cycle.omega > 0
     omega = cycle.omega[pos]
     temporal_hz = omega / TWOPI
     return cycle, cycle.f, omega, temporal_hz
-
-
-def _normalize_panels(panels, normalize: str):
-    normalize = normalize.lower()
-    if normalize in {"none", "raw"}:
-        return list(panels)
-    if normalize == "shared":
-        vmax = max(float(np.nanmax(p.C)) for p in panels)
-        vmax = max(vmax, 1e-30)
-        return [
-            SpectrumPanel(
-                p.key, p.title, p.f, p.omega, p.temporal_hz,
-                p.C / vmax, p.overlay_kind, p.overlay_param,
-            )
-            for p in panels
-        ]
-    if normalize == "panel":
-        out = []
-        for p in panels:
-            vmax = max(float(np.nanmax(p.C)), 1e-30)
-            out.append(
-                SpectrumPanel(
-                    p.key, p.title, p.f, p.omega, p.temporal_hz,
-                    p.C / vmax, p.overlay_kind, p.overlay_param,
-                )
-            )
-        return out
-    raise ValueError("normalize must be 'none', 'raw', 'shared', or 'panel'")
-
-
-def cycle_decomposition_panels(*, normalize: str = "panel"):
-    """Return Figure 7 early/late C=I(f)Q cycle panels.
-
-    The returned arrays are direct positive-frequency slices of the canonical
-    Figure 7 cycle, optionally normalized for plotting.
-    """
-    cycle, f, omega, temporal_hz = canonical_positive_cycle_view()
-    pos = cycle.omega > 0
-    panels = [
-        SpectrumPanel(
-            "cycle_early",
-            "Early fixation\n(Mostofi saccade)",
-            f,
-            omega,
-            temporal_hz,
-            cycle.C_early_mod[:, pos],
-        ),
-        SpectrumPanel(
-            "cycle_late",
-            f"Late fixation\n(drift, $D={cycle.drift_D_eff_deg2_s:.3g}$)",
-            f,
-            omega,
-            temporal_hz,
-            cycle.C_late_total[:, pos],
-        ),
-    ]
-    return _normalize_panels(panels, normalize)
-
-
-def spectrum_library_panels(*, normalize: str = "panel"):
-    """Return the shared Figure 1c spectrum library on a common positive-Hz grid."""
-    _, f, omega, temporal_hz = canonical_positive_cycle_view()
-    drift_D = 1.0
-    saccade_A = 3.0
-    linear_s = 1.0
-    separable_omega0 = DEFAULT_SEPARABLE_OMEGA0
-    panels = [
-        SpectrumPanel(
-            "brownian_drift_D_1",
-            "Brownian drift\n($D = 1$)",
-            f,
-            omega,
-            temporal_hz,
-            DriftSpectrum(D=drift_D).C(f, omega),
-            overlay_kind="drift_legacy_hz",
-            overlay_param=drift_D,
-        ),
-        SpectrumPanel(
-            "saccade_A_3",
-            "Saccade\n($A = 3$)",
-            f,
-            omega,
-            temporal_hz,
-            SaccadeSpectrum(A=saccade_A).C(f, omega),
-        ),
-        SpectrumPanel(
-            "dong_atick_separable",
-            "Separable approximation\n(Dong and Atick separable)",
-            f,
-            omega,
-            temporal_hz,
-            SeparableMovieSpectrum(omega0=separable_omega0).C(f, omega),
-        ),
-        SpectrumPanel(
-            "dong_atick_linear",
-            "Linear velocity spread\n(Dong and Atick linear)",
-            f,
-            omega,
-            temporal_hz,
-            LinearMotionSpectrum(s=linear_s).C(f, omega),
-            overlay_kind="linear_hz",
-            overlay_param=linear_s,
-        ),
-    ]
-    return _normalize_panels(panels, normalize)
 
 
 def cycle_solver_spectra(*, use_modulated_early: bool = True):
@@ -441,23 +316,6 @@ def spectrum_comparison_specs(*, include_controls: bool = True):
     ]
 
 
-def overlay_curve_hz(panel: SpectrumPanel):
-    """Return an overlay curve `(f, temporal_hz)` for panels that define one."""
-    if panel.overlay_kind is None:
-        return None
-    if panel.overlay_param is None:
-        return None
-    f = panel.f
-    p = float(panel.overlay_param)
-    if panel.overlay_kind == "drift_legacy_hz":
-        return f, p * f ** 2 / TWOPI
-    if panel.overlay_kind == "drift_cycles_hz":
-        return f, p * TWOPI * f ** 2
-    if panel.overlay_kind == "linear_hz":
-        return f, p * f / TWOPI
-    raise ValueError(f"Unknown overlay kind {panel.overlay_kind!r}")
-
-
 __all__ = [
     "SpectrumSpec",
     "DEFAULT_DRIFT_SWEEP",
@@ -472,11 +330,7 @@ __all__ = [
     "spectrum_comparison_spec_objects",
     "list_spectrum_sets",
     "get_spectrum_set",
-    "SpectrumPanel",
     "canonical_positive_cycle_view",
-    "cycle_decomposition_panels",
-    "spectrum_library_panels",
     "cycle_solver_spectra",
     "spectrum_comparison_specs",
-    "overlay_curve_hz",
 ]

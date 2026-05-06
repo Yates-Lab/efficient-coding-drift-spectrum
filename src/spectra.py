@@ -400,9 +400,6 @@ class StaticImageSpectrum(Spectrum):
         object.__setattr__(self, "name", "static_image")
         object.__setattr__(self, "reference", "Field 1987")
 
-    def image_factor(self, f) -> np.ndarray:
-        return self.image.C(f)
-
     def C(self, f, omega) -> np.ndarray:
         raise NotImplementedError(
             "Static image has no spatiotemporal spectrum on a finite ω grid; "
@@ -474,14 +471,6 @@ class SeparableMovieSpectrum(Spectrum):
     def __post_init__(self):
         object.__setattr__(self, "name", "separable_movie")
         object.__setattr__(self, "reference", "stationary separable movie control")
-
-    def temporal_factor(self, omega) -> np.ndarray:
-        omega_arr = np.atleast_1d(np.asarray(omega, dtype=float)).ravel()
-        return temporal_power_law(
-            omega_arr,
-            omega0=self.omega0,
-            gamma=self.temporal_beta,
-        )
 
     def C(self, f, omega) -> np.ndarray:
         f_arr = np.atleast_1d(np.asarray(f, dtype=float)).ravel()
@@ -594,25 +583,6 @@ def unit_step_temporal_envelopes(
         P = (np.abs(U[pos]) ** 2) / T_win
         P = np.maximum(P[order], smooth_floor)
         E[i] = np.interp(wq, omega_pos, P, left=0.0, right=0.0)
-    return E
-
-
-def analytic_transient_envelopes(
-    omega, durations, *,
-    T_win=0.512, low_factor=1.0, high_factor=1.25, high_order=4.0,
-):
-    """Smooth analytic surrogate for |FT[unit displacement transient]|^2.
-
-    1/(omega^2 + omega_low^2) low-frequency floor with a high-order
-    high-frequency roll-off at omega_high = high_factor * 2π / duration.
-    """
-    omega = np.abs(np.atleast_1d(np.asarray(omega, dtype=float)).ravel())
-    durations = np.atleast_1d(np.asarray(durations, dtype=float)).ravel()
-    omega_low = low_factor * 2.0 * np.pi / T_win
-    omega_high = high_factor * 2.0 * np.pi / durations[:, None]
-    w = omega[None, :]
-    E = 1.0 / (w * w + omega_low * omega_low)
-    E = E / (1.0 + (w / omega_high) ** high_order)
     return E
 
 

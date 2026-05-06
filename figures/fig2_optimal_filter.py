@@ -16,10 +16,16 @@ sys.path.insert(0, ".")
 
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib as mpl
 
 from src.pipeline import SolveConfig, run_many
-from src.plotting import setup_style, band_mask_radial
+from src.plotting import (
+    add_band_edges,
+    add_log_colorbar,
+    band_mask_radial,
+    panel_loglog,
+    setup_style,
+    shared_lims,
+)
 from src.params import F_MAX, OMEGA_MIN, OMEGA_MAX
 from src.power_spectrum_library import drift_spectrum_specs
 
@@ -68,38 +74,38 @@ def fig2():
 
     cmap = "viridis"
 
-    def lims(rows, floor=1e-5):
-        v = np.concatenate([r[1].v_sq.flatten() for r in rows])
-        v = v[np.isfinite(v) & (v > 0)]
-        return floor * v.max(), v.max()
+    def row_vmax(rows):
+        _, vmax = shared_lims([np.where(mask, r[1].v_sq, np.nan) for r in rows], floor=1e-5)
+        return vmax
 
-    def panel(ax, result, vmin, vmax, title):
-        v_sq = result.v_sq
-        v_disp = np.where(mask, v_sq, vmin)
-        v_disp = np.maximum(v_disp, vmin)
-        i_pos = omega > 0
-        levels = np.geomspace(vmin, vmax, 24)
-        ax.contourf(f, omega[i_pos], v_disp[:, i_pos].T,
-                    levels=levels,
-                    norm=mpl.colors.LogNorm(vmin=vmin, vmax=vmax),
-                    cmap=cmap, extend="both")
-        ax.set_xscale("log")
-        ax.set_yscale("log")
-        ax.set_xlim(f.min(), f.max())
-        ax.set_ylim(omega_pos.min(), omega.max())
-        ax.axvline(F_MAX, color="white", lw=0.5, ls=":")
-        ax.axhline(OMEGA_MIN, color="white", lw=0.5, ls=":")
-        ax.axhline(OMEGA_MAX, color="white", lw=0.5, ls=":")
+    def panel(ax, result, vmax, title):
+        v_disp = np.where(mask, result.v_sq / vmax, 1e-5)
+        panel_loglog(
+            ax,
+            f,
+            omega,
+            v_disp,
+            1e-5,
+            1.0,
+            n_levels=24,
+            cmap=cmap,
+            f_min=f.min(),
+            f_max=f.max(),
+            omega_min=omega_pos.min(),
+            omega_max=omega_pos.max(),
+            positive_only=True,
+        )
+        add_band_edges(ax, f_max=F_MAX, omega_min=OMEGA_MIN, omega_max=OMEGA_MAX)
         ax.set_title(title, pad=2, fontsize=8.5)
 
-    vmin1, vmax1 = lims(row1)
+    vmax1 = row_vmax(row1)
     for ax, (D, result) in zip(axes[0], row1):
-        panel(ax, result, vmin1, vmax1,
+        panel(ax, result, vmax1,
               rf"$D = {D:.2g}$,  $I^* = {result.I:.2f}$")
 
-    vmin2, vmax2 = lims(row2)
+    vmax2 = row_vmax(row2)
     for ax, (sin, result) in zip(axes[1], row2):
-        panel(ax, result, vmin2, vmax2,
+        panel(ax, result, vmax2,
               rf"$\sigma_\mathrm{{in}} = {sin:.2g}$,  $I^* = {result.I:.2f}$")
 
     for ax in axes[-1]:
@@ -112,16 +118,14 @@ def fig2():
     fig.text(0.02, 0.27, rf"vary $\sigma_\mathrm{{in}}$" + "\n" + rf"$D={D_fixed}$",
              rotation=90, fontsize=9, va="center", ha="center")
 
-    cbar_ax = fig.add_axes([0.945, 0.13, 0.012, 0.74])
-    cb = mpl.colorbar.ColorbarBase(
-        cbar_ax,
-        cmap=plt.get_cmap(cmap),
-        norm=mpl.colors.LogNorm(vmin=1e-5, vmax=1.0),
-        orientation="vertical",
-        extend="min",
+    add_log_colorbar(
+        fig,
+        [0.945, 0.13, 0.012, 0.74],
+        cmap=cmap,
+        vmin=1e-5,
+        vmax=1.0,
+        label=r"$|v^\star|^2 / \max |v^\star|^2$ (per row)",
     )
-    cb.set_label(r"$|v^\star|^2 / \max |v^\star|^2$ (per row)")
-    cb.ax.tick_params(direction="out", labelsize=7)
 
     fig.suptitle(
         r"Optimal spatiotemporal filter $|v^\star(f,\omega)|^2$ under drift",

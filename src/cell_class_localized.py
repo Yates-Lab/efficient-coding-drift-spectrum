@@ -13,16 +13,13 @@ allocation model:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
 from src.cell_class_learning import (
     Condition,
-    OracleStack,
-    SweepResult,
     normalize_condition_weights,
-    solve_oracle_stack,
 )
 from src.cell_class_learning_fast import (
     _as_torch_device,
@@ -635,56 +632,6 @@ def refit_modulation_for_fixed_classes(
         )
 
 
-def sweep_cell_classes_localized(
-    oracle: OracleStack,
-    *,
-    K_values: Sequence[int] = (1, 2, 3),
-    loc_weight: float = 0.5,
-    delta_max: float = 0.5,
-    learn_baseline_share: bool = True,
-    n_steps: int = 1500,
-    n_restarts: int = 2,
-    lr: float = 5e-2,
-    smooth_weight: float = 0.0,
-    device: str = "auto",
-    dtype: str = "float32",
-    patience: int = 25,
-    check_every: int = 25,
-    seed: int = 0,
-    verbose: bool = False,
-) -> SweepResult:
-    fits: Dict[int, LocalizedClassFit] = {}
-    regret: Dict[int, float] = {}
-    for K in K_values:
-        fit = fit_cell_classes_localized(
-            oracle.C_stack,
-            oracle.weights,
-            oracle.f,
-            sigma_in=oracle.results[0].sigma_in,
-            sigma_out=oracle.results[0].sigma_out,
-            P0=oracle.results[0].P0,
-            K=K,
-            condition_weights=oracle.condition_weights,
-            G_star=oracle.G_star,
-            loc_weight=loc_weight,
-            delta_max=delta_max,
-            learn_baseline_share=learn_baseline_share,
-            n_steps=n_steps,
-            n_restarts=n_restarts,
-            lr=lr,
-            smooth_weight=smooth_weight,
-            device=device,
-            dtype=dtype,
-            patience=patience,
-            check_every=check_every,
-            seed=seed + 100 * K,
-            verbose=verbose,
-        )
-        fits[K] = fit
-        regret[K] = (oracle.J_star - fit.J) / max(abs(oracle.J_star), 1e-300)
-    return SweepResult(oracle.J_star, oracle.I_star_q, fits, regret)
-
-
 def build_strategy_conditions(
     *,
     D: float,
@@ -720,23 +667,3 @@ def build_strategy_conditions(
     ]
     pi = normalize_condition_weights(np.asarray([early_weight, late_weight], dtype=float), 2)
     return conditions, pi
-
-
-def solve_strategy_oracle(
-    *,
-    D: float,
-    A: float,
-    grid: str = "fast",
-    sigma_in: float = 0.3,
-    sigma_out: float = 1.0,
-    P0: float = 50.0,
-) -> OracleStack:
-    conditions, pi = build_strategy_conditions(D=D, A=A, grid=grid)
-    return solve_oracle_stack(
-        conditions,
-        sigma_in=sigma_in,
-        sigma_out=sigma_out,
-        P0=P0,
-        grid=grid,
-        condition_weights=pi,
-    )

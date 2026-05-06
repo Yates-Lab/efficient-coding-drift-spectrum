@@ -1,4 +1,5 @@
 *.pyc
+*.pdf
 outputs/*
 *.npz
 .DS_Store

@@ -66,17 +66,26 @@ def log_grid(x_min, x_max, n):
 
 
 def radial_log_grid(
-    n_f=200,
+    n_k=200,
     n_omega=200,
     *,
-    f_min=0.1,
-    f_max=6.0,
+    k_min=0.1,
+    k_max=6.0,
     omega_min=0.25,
     omega_max=400.0,
+    n_f=None,
+    f_min=None,
+    f_max=None,
 ):
-    """Positive log-spaced (f, omega) display grid for spectrum panels."""
+    """Positive log-spaced (k, omega) display grid for spectrum panels."""
+    if n_f is not None:
+        n_k = n_f
+    if f_min is not None:
+        k_min = f_min
+    if f_max is not None:
+        k_max = f_max
     return (
-        log_grid(f_min, f_max, n_f),
+        log_grid(k_min, k_max, n_k),
         log_grid(omega_min, omega_max, n_omega),
     )
 
@@ -146,9 +155,10 @@ def add_log_colorbar(
 def add_band_edges(
     ax,
     *,
-    f_max=None,
+    k_max=None,
     omega_min=None,
     omega_max=None,
+    f_max=None,
     color="white",
     lw=0.5,
     ls=":",
@@ -156,7 +166,9 @@ def add_band_edges(
 ):
     """Overlay standard spatial and temporal band edges on a panel."""
     if f_max is not None:
-        ax.axvline(f_max, color=color, lw=lw, ls=ls, alpha=alpha)
+        k_max = f_max
+    if k_max is not None:
+        ax.axvline(k_max, color=color, lw=lw, ls=ls, alpha=alpha)
     if omega_min is not None:
         ax.axhline(omega_min, color=color, lw=lw, ls=ls, alpha=alpha)
     if omega_max is not None:
@@ -205,24 +217,30 @@ def log_contourf(
 
 def panel_loglog(
     ax,
-    f,
+    k,
     omega,
     C,
     vmin=None,
     vmax=None,
     n_levels=24,
     cmap="magma",
-    f_min=0.1,
-    f_max=6.0,
+    k_min=0.1,
+    k_max=6.0,
     omega_min=0.25,
     omega_max=400.0,
     *,
+    f_min=None,
+    f_max=None,
     positive_only=False,
     temporal_hz=False,
     transpose=True,
     extend="both",
 ):
-    """Plot C with shape (Nf, Nomega) as a log-log contourf in (f, omega)."""
+    """Plot C with shape (Nk, Nomega) as a log-log contourf in (k, omega)."""
+    if f_min is not None:
+        k_min = f_min
+    if f_max is not None:
+        k_max = f_max
     y = np.asarray(omega, dtype=float)
     Z_source = np.asarray(C, dtype=float)
     if positive_only:
@@ -241,14 +259,14 @@ def panel_loglog(
     Z = np.maximum(Z, vmin)
     levels = log_levels(vmin, vmax, n_levels)
     cf = ax.contourf(
-        f, y, Z, levels=levels,
+        k, y, Z, levels=levels,
         norm=mpl.colors.LogNorm(vmin=vmin, vmax=vmax),
         cmap=cmap, extend=extend,
     )
     ax.set_xscale("log")
     ax.set_yscale("log")
-    if f_min is not None and f_max is not None:
-        ax.set_xlim(f_min, f_max)
+    if k_min is not None and k_max is not None:
+        ax.set_xlim(k_min, k_max)
     if omega_min is not None and omega_max is not None:
         if temporal_hz:
             omega_min = omega_min / (2.0 * np.pi)
@@ -258,7 +276,7 @@ def panel_loglog(
 
 
 # ---------------------------------------------------------------------------
-# Integration weights for radial (f, omega) grids
+# Integration weights for radial (k, omega) grids
 # ---------------------------------------------------------------------------
 
 def trapezoid_weights_1d(x):
@@ -273,24 +291,24 @@ def trapezoid_weights_1d(x):
     return w
 
 
-def radial_weights(f, omega):
-    """Build integration weights for I = (1/(2π)^2) ∫ f df dω · g(f, ω).
+def radial_weights(k, omega):
+    """Build integration weights for I = (1/(2π)^2) ∫ k dk dω · g(k, ω).
 
-    Returns weights w(f, ω) such that np.sum(g * w) ≈ I.
+    Returns weights w(k, ω) such that np.sum(g * w) ≈ I.
     """
-    f = np.asarray(f, dtype=float)
+    k = np.asarray(k, dtype=float)
     omega = np.asarray(omega, dtype=float)
-    wf = trapezoid_weights_1d(f)
+    wk = trapezoid_weights_1d(k)
     ww = trapezoid_weights_1d(omega)
-    W = (f * wf)[:, None] * ww[None, :] / (2.0 * np.pi) ** 2
+    W = (k * wk)[:, None] * ww[None, :] / (2.0 * np.pi) ** 2
     return W
 
 
-def band_mask_radial(f, omega, f_max, omega_min, omega_max):
-    """Boolean mask of (f, ω) inside the band B = [0, f_max] × {ω: ω_min <= |ω| <= ω_max}.
+def band_mask_radial(k, omega, k_max, omega_min, omega_max):
+    """Boolean mask of (k, ω) inside the band B = [0, k_max] × {ω: ω_min <= |ω| <= ω_max}.
 
-    Returns a 2D mask matching np.broadcast(f[:,None], ω[None,:]).
+    Returns a 2D mask matching np.broadcast(k[:,None], ω[None,:]).
     """
-    F = f[:, None]
+    K = k[:, None]
     W = omega[None, :]
-    return (F <= f_max) & (np.abs(W) >= omega_min) & (np.abs(W) <= omega_max)
+    return (K <= k_max) & (np.abs(W) >= omega_min) & (np.abs(W) <= omega_max)

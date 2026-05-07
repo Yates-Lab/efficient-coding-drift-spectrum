@@ -5,7 +5,7 @@ Solves the constrained optimization (eq. 20 in the appendix):
     max_{|v|^2 >= 0}  ∫_B Iθ(v; k, ω) dμ
     subject to        ∫_B |v|^2 (Cθ + σ_in^2) dμ = P_0
 
-where dμ = d²k dω / (2π)^3 (or, for radial integrals, f df dω / (2π)^2),
+where dμ = d²k dω / (2π)^3 (or, for radial integrals, k dk dω / (2π)^2),
 and B is the band ΩNyq × Ωt.
 
 Closed-form solution (eq. 23, numerically stabilized):

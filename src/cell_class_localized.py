@@ -48,27 +48,42 @@ class LocalizedClassFit:
     delta_qc: Array
     G: Array
     G_class: Array
-    f_centroid: Array
-    f_centroid_cpd: Array
-    f_log_std: Array
+    k_centroid: Array
+    k_centroid_cpd: Array
+    k_log_std: Array
     spatial_rf_width_deg: Array
     R_loc: float
     R_adapt: float
     history: Optional[Dict[str, List[float]]] = None
 
+    @property
+    def f_centroid(self) -> Array:
+        """Legacy alias for ``k_centroid``."""
+        return self.k_centroid
 
-def _validate_f_grid(f: Array, freq_shape: Tuple[int, ...]) -> Array:
-    f = np.asarray(f, dtype=np.float64).ravel()
+    @property
+    def f_centroid_cpd(self) -> Array:
+        """Legacy alias for ``k_centroid_cpd``."""
+        return self.k_centroid_cpd
+
+    @property
+    def f_log_std(self) -> Array:
+        """Legacy alias for ``k_log_std``."""
+        return self.k_log_std
+
+
+def _validate_k_grid(k: Array, freq_shape: Tuple[int, ...]) -> Array:
+    k = np.asarray(k, dtype=np.float64).ravel()
     if len(freq_shape) != 2:
         raise ValueError("localized cell classes currently require a (F, T) spectral grid")
-    if f.shape != (freq_shape[0],):
-        raise ValueError(f"f must have shape {(freq_shape[0],)}, got {f.shape}")
-    if not np.all(np.isfinite(f)) or np.any(f <= 0):
-        raise ValueError("f must be finite and strictly positive for log-frequency localization")
-    return f
+    if k.shape != (freq_shape[0],):
+        raise ValueError(f"k must have shape {(freq_shape[0],)}, got {k.shape}")
+    if not np.all(np.isfinite(k)) or np.any(k <= 0):
+        raise ValueError("k must be finite and strictly positive for log-frequency localization")
+    return k
 
 
-def _active_f_indices(freq_shape: Tuple[int, ...], support: Array) -> Array:
+def _active_k_indices(freq_shape: Tuple[int, ...], support: Array) -> Array:
     F, T = freq_shape
     return np.repeat(np.arange(F, dtype=np.int64), T)[np.asarray(support, dtype=bool)]
 
@@ -93,58 +108,58 @@ def _share_from_logits_torch(Z, B, *, delta_max: float, learn_baseline_share: bo
     return rho0, delta, rho
 
 
-def _spatial_marginal_torch(H_active, W_active, f_index, F_total: int):
+def _spatial_marginal_torch(H_active, W_active, k_index, F_total: int):
     import torch
 
     K = H_active.shape[0]
     out = torch.zeros((K, F_total), device=H_active.device, dtype=H_active.dtype)
-    out.scatter_add_(1, f_index[None, :].expand(K, -1), H_active * W_active[None, :])
+    out.scatter_add_(1, k_index[None, :].expand(K, -1), H_active * W_active[None, :])
     out = out / (torch.sum(out, dim=1, keepdim=True) + 1e-30)
     return out
 
 
-def spatial_stats_from_H(H: Array, f: Array, weights: Array) -> Tuple[Array, Array, Array, Array]:
-    """Return log-f centroids, cpd centroids, log std, and weighted marginals."""
+def spatial_stats_from_H(H: Array, k: Array, weights: Array) -> Tuple[Array, Array, Array, Array]:
+    """Return log-k centroids, cpd centroids, log std, and weighted marginals."""
     H = np.asarray(H, dtype=np.float64)
-    f = np.asarray(f, dtype=np.float64).ravel()
+    k = np.asarray(k, dtype=np.float64).ravel()
     weights = np.asarray(weights, dtype=np.float64)
-    if H.ndim != 3 or weights.shape != H.shape[1:] or f.shape != (H.shape[1],):
-        raise ValueError("expected H=(K,F,T), f=(F,), weights=(F,T)")
+    if H.ndim != 3 or weights.shape != H.shape[1:] or k.shape != (H.shape[1],):
+        raise ValueError("expected H=(K,Nk,T), k=(Nk,), weights=(Nk,T)")
     marginal = np.sum(H * weights[None, :, :], axis=2)
     marginal = marginal / np.maximum(np.sum(marginal, axis=1, keepdims=True), 1e-300)
-    log_f = np.log(f)
-    mu = np.sum(marginal * log_f[None, :], axis=1)
-    var = np.sum(marginal * (log_f[None, :] - mu[:, None]) ** 2, axis=1)
+    log_k = np.log(k)
+    mu = np.sum(marginal * log_k[None, :], axis=1)
+    var = np.sum(marginal * (log_k[None, :] - mu[:, None]) ** 2, axis=1)
     return mu, np.exp(mu), np.sqrt(np.maximum(var, 0.0)), marginal
 
 
-def _rf_width_from_spatial_marginal(marginal: Array, f: Array, *, k_max: float = 8.0, n_k: int = 512) -> Array:
+def _rf_width_from_spatial_marginal(marginal: Array, k: Array, *, k_max: float = 8.0, n_k: int = 512) -> Array:
     """Stable RF-width estimate from class spatial marginals."""
     widths = np.zeros(marginal.shape[0], dtype=np.float64)
-    f = np.asarray(f, dtype=np.float64)
+    k = np.asarray(k, dtype=np.float64)
     for c, m in enumerate(np.asarray(marginal, dtype=np.float64)):
         v_s = np.sqrt(np.maximum(m, 0.0))
         if not np.any(v_s > 0):
             widths[c] = np.nan
             continue
 
-        def vmag(k):
-            return np.interp(k, f, v_s, left=v_s[0], right=0.0)
+        def vmag(k_query):
+            return np.interp(k_query, k, v_s, left=v_s[0], right=0.0)
 
         rx, ry, v_xy = spatial_kernel_2d(vmag, k_max=k_max, n_k=n_k)
         r, v = radial_cross_section(v_xy, rx, ry)
         power = np.maximum(np.abs(v) ** 2, 0.0)
-        denom = np.trapz(power, r)
+        denom = np.trapezoid(power, r)
         if not np.isfinite(denom) or abs(denom) <= 1e-300:
             widths[c] = np.nan
         else:
-            widths[c] = float(np.sqrt(abs(np.trapz((r ** 2) * power, r) / denom)))
+            widths[c] = float(np.sqrt(abs(np.trapezoid((r ** 2) * power, r) / denom)))
     return widths
 
 
 def spatial_rf_width_from_H(
     H: Array,
-    f: Array,
+    k: Array,
     omega: Array,
     weights: Array,
     *,
@@ -156,8 +171,8 @@ def spatial_rf_width_from_H(
     if method != "second_moment":
         raise ValueError("only method='second_moment' is currently supported")
     del omega
-    _, _, _, marginal = spatial_stats_from_H(H, f, weights)
-    return _rf_width_from_spatial_marginal(marginal, f, k_max=k_max, n_k=n_k)
+    _, _, _, marginal = spatial_stats_from_H(H, k, weights)
+    return _rf_width_from_spatial_marginal(marginal, k, k_max=k_max, n_k=n_k)
 
 
 def _compute_fit_arrays(
@@ -172,7 +187,7 @@ def _compute_fit_arrays(
     W_np: Array,
     freq_shape: Tuple[int, ...],
     support_np: Array,
-    f: Array,
+    k: Array,
     sigma_in: float,
     sigma_out: float,
     P0: float,
@@ -199,8 +214,8 @@ def _compute_fit_arrays(
     G = _full_from_active(G_active, support_np, freq_shape)
     G_class = _full_from_active(G_class_active, support_np, freq_shape)
     weights_full = _full_from_active(W_np[None, :], support_np, freq_shape)[0]
-    mu, mu_cpd, log_std, marginal = spatial_stats_from_H(H, f, weights_full)
-    width = _rf_width_from_spatial_marginal(marginal, f)
+    mu, mu_cpd, log_std, marginal = spatial_stats_from_H(H, k, weights_full)
+    width = _rf_width_from_spatial_marginal(marginal, k)
     return LocalizedClassFit(
         K=K,
         J=J,
@@ -213,9 +228,9 @@ def _compute_fit_arrays(
         delta_qc=np.asarray(delta_qc, dtype=np.float64),
         G=G,
         G_class=G_class,
-        f_centroid=mu,
-        f_centroid_cpd=mu_cpd,
-        f_log_std=log_std,
+        k_centroid=mu,
+        k_centroid_cpd=mu_cpd,
+        k_log_std=log_std,
         spatial_rf_width_deg=width,
         R_loc=float(R_loc),
         R_adapt=float(R_adapt),
@@ -226,7 +241,7 @@ def _compute_fit_arrays(
 def fit_cell_classes_localized(
     C_stack: Array,
     weights: Array,
-    f: Array,
+    k: Array,
     *,
     sigma_in: float,
     sigma_out: float,
@@ -267,7 +282,7 @@ def fit_cell_classes_localized(
         raise ValueError("regularization weights must be nonnegative")
 
     C_np, W_np, freq_shape, support_np = _flatten_and_mask(C_stack, weights)
-    f = _validate_f_grid(f, freq_shape)
+    k = _validate_k_grid(k, freq_shape)
     Q, F_active = C_np.shape
     F_total = int(np.prod(freq_shape))
     pi_np = normalize_condition_weights(condition_weights, Q)
@@ -277,8 +292,8 @@ def fit_cell_classes_localized(
     C = torch.as_tensor(C_np, device=torch_device, dtype=torch_dtype)
     W = torch.as_tensor(W_np, device=torch_device, dtype=torch_dtype)
     pi = torch.as_tensor(pi_np, device=torch_device, dtype=torch_dtype)
-    log_f = torch.as_tensor(np.log(f), device=torch_device, dtype=torch_dtype)
-    f_index = torch.as_tensor(_active_f_indices(freq_shape, support_np), device=torch_device, dtype=torch.long)
+    log_k = torch.as_tensor(np.log(k), device=torch_device, dtype=torch_dtype)
+    k_index = torch.as_tensor(_active_k_indices(freq_shape, support_np), device=torch_device, dtype=torch.long)
     support_idx = torch.as_tensor(np.flatnonzero(support_np), device=torch_device, dtype=torch.long)
 
     s_in2 = float(sigma_in) ** 2
@@ -307,9 +322,9 @@ def fit_cell_classes_localized(
         return penalty
 
     def localization_penalty(H_active, rho0):
-        marginal = _spatial_marginal_torch(H_active, W, f_index, freq_shape[0])
-        mu = torch.sum(marginal * log_f[None, :], dim=1)
-        var = torch.sum(marginal * (log_f[None, :] - mu[:, None]) ** 2, dim=1)
+        marginal = _spatial_marginal_torch(H_active, W, k_index, freq_shape[0])
+        mu = torch.sum(marginal * log_k[None, :], dim=1)
+        var = torch.sum(marginal * (log_k[None, :] - mu[:, None]) ** 2, dim=1)
         return torch.sum(rho0 * var), mu, var
 
     def normalize_retuned(H_active, D):
@@ -454,7 +469,7 @@ def fit_cell_classes_localized(
                 W_np=W_np,
                 freq_shape=freq_shape,
                 support_np=support_np,
-                f=f,
+                k=k,
                 sigma_in=sigma_in,
                 sigma_out=sigma_out,
                 P0=P0,
@@ -475,7 +490,7 @@ def fit_cell_classes_localized(
 def refit_modulation_for_fixed_classes(
     C_stack: Array,
     weights: Array,
-    f: Array,
+    k: Array,
     H_fixed: Array,
     rho0: Array,
     *,
@@ -501,7 +516,7 @@ def refit_modulation_for_fixed_classes(
     import torch
 
     C_np, W_np, freq_shape, support_np = _flatten_and_mask(C_stack, weights)
-    f = _validate_f_grid(f, freq_shape)
+    k = _validate_k_grid(k, freq_shape)
     H_fixed = np.asarray(H_fixed, dtype=np.float64)
     if H_fixed.ndim != 3 or H_fixed.shape[1:] != freq_shape:
         raise ValueError(f"H_fixed must have shape (K, {freq_shape}), got {H_fixed.shape}")
@@ -615,7 +630,7 @@ def refit_modulation_for_fixed_classes(
             W_np=W_np,
             freq_shape=freq_shape,
             support_np=support_np,
-            f=f,
+            k=k,
             sigma_in=sigma_in,
             sigma_out=sigma_out,
             P0=P0,

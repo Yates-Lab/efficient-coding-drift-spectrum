@@ -1,12 +1,12 @@
 """Information-aware learning of reusable cell-class filters.
 
 This module is designed to drop into the current moving-sensor efficient-coding
-repo. It learns a small set of fixed filter-power spectra H_c(f, omega) whose
+repo. It learns a small set of fixed filter-power spectra H_c(k, omega) whose
 condition-dependent mixtures approximate the oracle efficient-coding filters
 for a stack of movement conditions.
 
 The learned object is not a space-time separable filter. Each class spectrum
-H_c(f, omega) is fully nonseparable unless you add that constraint later.
+H_c(k, omega) is fully nonseparable unless you add that constraint later.
 
 Model
 -----
@@ -34,7 +34,7 @@ from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 import numpy as np
 
-from src.params import F_MAX, OMEGA_MIN, OMEGA_MAX
+from src.params import K_MAX, OMEGA_MIN, OMEGA_MAX
 from src.pipeline import Result, run
 from src.plotting import radial_weights, band_mask_radial
 from src.spectra import DriftSpectrum, SaccadeSpectrum
@@ -60,7 +60,7 @@ class OracleStack:
 
     conditions: List[Condition]
     results: List[Result]
-    f: Array
+    k: Array
     omega: Array
     weights: Array
     C_stack: Array
@@ -68,6 +68,11 @@ class OracleStack:
     I_star_q: Array
     J_star: float
     condition_weights: Array
+
+    @property
+    def f(self) -> Array:
+        """Legacy alias for ``k``."""
+        return self.k
 
 
 @dataclass
@@ -326,7 +331,7 @@ def solve_oracle_stack(
     sigma_out: float = 1.0,
     P0: float = 50.0,
     grid: str = "fast",
-    band: Tuple[float, float, float] = (F_MAX, OMEGA_MIN, OMEGA_MAX),
+    band: Tuple[float, float, float] = (K_MAX, OMEGA_MIN, OMEGA_MAX),
     condition_weights: Optional[Array] = None,
 ) -> OracleStack:
     """Run the repo's one-filter solver on every condition."""
@@ -342,10 +347,10 @@ def solve_oracle_stack(
         )
         results.append(r)
 
-    f = results[0].f
+    k = results[0].k
     omega = results[0].omega
-    f_max, omega_min, omega_max = band
-    weights = radial_weights(f, omega) * band_mask_radial(f, omega, f_max, omega_min, omega_max)
+    k_max, omega_min, omega_max = band
+    weights = radial_weights(k, omega) * band_mask_radial(k, omega, k_max, omega_min, omega_max)
     C_stack = np.stack([r.C for r in results], axis=0)
     G_star = np.stack([r.v_sq for r in results], axis=0)
 
@@ -355,7 +360,7 @@ def solve_oracle_stack(
     return OracleStack(
         conditions=list(conditions),
         results=results,
-        f=f,
+        k=k,
         omega=omega,
         weights=weights,
         C_stack=C_stack,
@@ -556,19 +561,19 @@ def sweep_cell_classes(
 # ---------------------------------------------------------------------------
 
 
-def class_centroids(H: Array, f: Array, omega: Array, weights: Array) -> List[Dict[str, float]]:
+def class_centroids(H: Array, k: Array, omega: Array, weights: Array) -> List[Dict[str, float]]:
     """Return spatial and temporal centroids for each learned class."""
     H = np.asarray(H, dtype=float)
-    f = np.asarray(f, dtype=float).ravel()
+    k = np.asarray(k, dtype=float).ravel()
     omega = np.asarray(omega, dtype=float).ravel()
-    F_grid = f[:, None]
+    K_grid = k[:, None]
     W_grid = np.abs(omega)[None, :]
     out: List[Dict[str, float]] = []
     for c in range(H.shape[0]):
         mass = float(np.sum(H[c] * weights)) + 1e-12
-        f_bar = float(np.sum(H[c] * F_grid * weights) / mass)
+        k_bar = float(np.sum(H[c] * K_grid * weights) / mass)
         omega_bar = float(np.sum(H[c] * W_grid * weights) / mass)
-        out.append({"class": c, "f_centroid": f_bar, "omega_centroid": omega_bar})
+        out.append({"class": c, "k_centroid": k_bar, "omega_centroid": omega_bar})
     return out
 
 
@@ -668,11 +673,12 @@ def per_condition_regret(I_star_q: Array, I_q: Array) -> Array:
 
 def class_summary_table(
     H: Array,
-    f: Array,
+    k: Array,
     omega: Array,
     weights: Array,
     *,
-    f_cut: float = 1.0,
+    k_cut: float = 1.0,
+    f_cut: float | None = None,
     omega_cut: float = 50.0,
 ) -> List[Dict[str, float]]:
     """Quantitative summaries for learned class spectra.
@@ -682,26 +688,28 @@ def class_summary_table(
     not absolute gain summaries.
     """
     H = np.asarray(H, dtype=float)
-    f = np.asarray(f, dtype=float).ravel()
+    if f_cut is not None:
+        k_cut = f_cut
+    k = np.asarray(k, dtype=float).ravel()
     omega = np.asarray(omega, dtype=float).ravel()
     weights = np.asarray(weights, dtype=float)
-    F_grid = f[:, None]
+    K_grid = k[:, None]
     W_grid = np.abs(omega)[None, :]
     rows: List[Dict[str, float]] = []
     for c in range(H.shape[0]):
         mass = float(np.sum(H[c] * weights)) + 1e-300
-        f_bar = float(np.sum(H[c] * F_grid * weights) / mass)
+        k_bar = float(np.sum(H[c] * K_grid * weights) / mass)
         omega_bar = float(np.sum(H[c] * W_grid * weights) / mass)
-        high_f = float(np.sum(H[c] * weights * (F_grid >= f_cut)) / mass)
+        high_k = float(np.sum(H[c] * weights * (K_grid >= k_cut)) / mass)
         high_w = float(np.sum(H[c] * weights * (W_grid >= omega_cut)) / mass)
         rows.append(
             {
                 "class": int(c),
-                "f_centroid": f_bar,
+                "k_centroid": k_bar,
                 "omega_centroid": omega_bar,
-                "high_f_fraction": high_f,
+                "high_k_fraction": high_k,
                 "high_omega_fraction": high_w,
-                "f_cut": float(f_cut),
+                "k_cut": float(k_cut),
                 "omega_cut": float(omega_cut),
             }
         )
@@ -764,7 +772,7 @@ def log_separability_residual(
 
 def temporal_kernel_from_filter_power(
     v_sq: Array,
-    f: Array,
+    k: Array,
     omega: Array,
     *,
     taper_alpha: float = 0.25,
@@ -779,44 +787,44 @@ def temporal_kernel_from_filter_power(
     from src.params import OMEGA_MIN, OMEGA_MAX
 
     v_sq = np.asarray(v_sq, dtype=float)
-    f = np.asarray(f, dtype=float).ravel()
+    k = np.asarray(k, dtype=float).ravel()
     omega = np.asarray(omega, dtype=float).ravel()
     domega = np.gradient(omega)
-    energy_per_f = np.sum(v_sq * np.abs(domega)[None, :], axis=1)
-    i_peak_f = int(np.argmax(energy_per_f))
-    f_peak = float(f[i_peak_f])
-    v_t_mag = np.sqrt(np.maximum(v_sq[i_peak_f, :], 0.0))
+    energy_per_k = np.sum(v_sq * np.abs(domega)[None, :], axis=1)
+    i_peak_k = int(np.argmax(energy_per_k))
+    k_peak = float(k[i_peak_k])
+    v_t_mag = np.sqrt(np.maximum(v_sq[i_peak_k, :], 0.0))
     taper = soft_band_taper(omega, OMEGA_MIN, OMEGA_MAX, alpha=taper_alpha)
     v_t_smooth = v_t_mag * taper
     floor = floor_rel * max(float(v_t_smooth.max()), 1e-30)
     v_t_smooth = np.maximum(v_t_smooth, floor)
     t, h_t, _ = minimum_phase_temporal_filter(v_t_smooth, omega)
-    return t, h_t, f_peak
+    return t, h_t, k_peak
 
 
 def spatial_kernel_from_filter_power(
     v_sq: Array,
-    f: Array,
+    k: Array,
     omega: Array,
     *,
     k_max: float = 8.0,
     n_k: int = 512,
-    n_f_fine: int = 1024,
+    n_k_fine: int = 1024,
 ) -> Tuple[Array, Array]:
     """Zero-phase radial spatial kernel for a filter-power spectrum."""
     from src.kernels import spatial_kernel_2d, radial_cross_section
 
     v_sq = np.asarray(v_sq, dtype=float)
-    f = np.asarray(f, dtype=float).ravel()
+    k = np.asarray(k, dtype=float).ravel()
     omega = np.asarray(omega, dtype=float).ravel()
     domega = np.gradient(omega)
     v_s_sq = np.sum(v_sq * np.abs(domega)[None, :], axis=1) / (2.0 * np.pi)
     v_s = np.sqrt(np.maximum(v_s_sq, 0.0))
-    f_fine = np.linspace(0.0, f.max() * 1.2, n_f_fine)
-    v_s_interp = np.interp(f_fine, f, v_s, left=v_s[0], right=0.0)
+    k_fine = np.linspace(0.0, k.max() * 1.2, n_k_fine)
+    v_s_interp = np.interp(k_fine, k, v_s, left=v_s[0], right=0.0)
 
-    def vmag(k):
-        return np.interp(k, f_fine, v_s_interp, left=v_s_interp[0], right=0.0)
+    def vmag(k_query):
+        return np.interp(k_query, k_fine, v_s_interp, left=v_s_interp[0], right=0.0)
 
     rx, ry, v_xy = spatial_kernel_2d(vmag, k_max=k_max, n_k=n_k)
     r_radial, v_radial = radial_cross_section(v_xy, rx, ry)

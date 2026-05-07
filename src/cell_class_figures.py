@@ -31,11 +31,11 @@ def log_additive_separability_r2(
 
     A positive array is multiplicatively separable when
 
-        Z(f, omega) = A(f) B(omega).
+        Z(k, omega) = A(k) B(omega).
 
     Taking logs turns this into an additive model,
 
-        log Z(f, omega) = a(f) + b(omega).
+        log Z(k, omega) = a(k) + b(omega).
 
     This computes the weighted two-way additive fit and returns the fraction of
     weighted log-variance explained. Values near one mean that the spectrum is

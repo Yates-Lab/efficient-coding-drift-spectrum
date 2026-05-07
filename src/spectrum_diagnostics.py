@@ -13,36 +13,38 @@ Array = np.ndarray
 
 def temporal_centroid_by_spatial_frequency(
     C: Array,
-    f: Array,
+    k: Array,
     omega: Array,
     *,
     omega_min: float = 0.0,
 ) -> tuple[Array, Array]:
-    """Return |omega|-centroid of C(f,omega) at each spatial frequency.
+    """Return |omega|-centroid of C(k,omega) at each spatial frequency.
 
-    For a multiplicatively separable spectrum C(f,omega)=A(f)B(omega), this
-    centroid is constant in f. Movement-generated spectra generally make the
-    centroid depend on f.
+    For a multiplicatively separable spectrum C(k,omega)=A(k)B(omega), this
+    centroid is constant in k. Movement-generated spectra generally make the
+    centroid depend on k.
     """
     C = np.asarray(C, dtype=float)
-    f = np.asarray(f, dtype=float).ravel()
+    k = np.asarray(k, dtype=float).ravel()
     omega = np.asarray(omega, dtype=float).ravel()
-    if C.shape != (f.size, omega.size):
-        raise ValueError("C must have shape (len(f), len(omega))")
+    if C.shape != (k.size, omega.size):
+        raise ValueError("C must have shape (len(k), len(omega))")
     m = np.abs(omega) >= float(omega_min)
     Om = np.abs(omega[m])[None, :]
     Cp = np.maximum(C[:, m], 0.0)
-    denom = np.trapz(Cp, omega[m], axis=1)
-    numer = np.trapz(Cp * Om, omega[m], axis=1)
+    denom = np.trapezoid(Cp, omega[m], axis=1)
+    numer = np.trapezoid(Cp * Om, omega[m], axis=1)
     centroid = numer / np.maximum(denom, 1e-300)
-    return f, centroid
+    return k, centroid
 
 
 def temporal_centroid_log_slope(
     C: Array,
-    f: Array,
+    k: Array,
     omega: Array,
     *,
+    k_lo: float | None = None,
+    k_hi: float | None = None,
     f_lo: float | None = None,
     f_hi: float | None = None,
     omega_min: float = 0.0,
@@ -53,14 +55,18 @@ def temporal_centroid_log_slope(
     tends toward slope one; Brownian drift tends toward slope two before finite
     bandwidth truncation.
     """
-    f, centroid = temporal_centroid_by_spatial_frequency(
-        C, f, omega, omega_min=omega_min
-    )
-    m = np.isfinite(centroid) & (centroid > 0) & (f > 0)
     if f_lo is not None:
-        m &= f >= float(f_lo)
+        k_lo = f_lo
     if f_hi is not None:
-        m &= f <= float(f_hi)
+        k_hi = f_hi
+    k, centroid = temporal_centroid_by_spatial_frequency(
+        C, k, omega, omega_min=omega_min
+    )
+    m = np.isfinite(centroid) & (centroid > 0) & (k > 0)
+    if k_lo is not None:
+        m &= k >= float(k_lo)
+    if k_hi is not None:
+        m &= k <= float(k_hi)
     if np.count_nonzero(m) < 3:
         return float("nan")
-    return float(np.polyfit(np.log(f[m]), np.log(centroid[m]), 1)[0])
+    return float(np.polyfit(np.log(k[m]), np.log(centroid[m]), 1)[0])

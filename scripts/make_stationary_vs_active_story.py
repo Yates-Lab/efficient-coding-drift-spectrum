@@ -26,7 +26,7 @@ import sys
 sys.path.insert(0, ".")
 
 from src.cell_class_figures import log_additive_separability_r2, normalize_for_plot
-from src.params import F_MAX, OMEGA_MIN, OMEGA_MAX
+from src.params import K_MAX, OMEGA_MIN, OMEGA_MAX
 from src.pipeline import run, extract_kernels
 from src.plotting import radial_weights, band_mask_radial, log_contourf, setup_style
 from src.power_spectrum_library import stationary_vs_active_story_specs
@@ -68,7 +68,7 @@ def plot_spectra_and_oracles(results, outdir: Path):
     n = len(results)
     f = results[0][1].f
     omega = results[0][1].omega
-    weights = radial_weights(f, omega) * band_mask_radial(f, omega, F_MAX, OMEGA_MIN, OMEGA_MAX)
+    weights = radial_weights(f, omega) * band_mask_radial(f, omega, K_MAX, OMEGA_MIN, OMEGA_MAX)
     omega_pos = omega > 0
 
     fig, axes = plt.subplots(2, n, figsize=(2.5 * n, 4.6), constrained_layout=True)
@@ -98,7 +98,7 @@ def plot_spectra_and_oracles(results, outdir: Path):
         cf1 = log_contourf(axes[1, j], f, omega[omega_pos], G_plot.T, n_levels=18, cmap="viridis", vmin_floor=1e-6)
         axes[0, j].set_title(f"{spec.title}\n$R^2_{{sep}}(C)$={r2_C:.2f}, slope={slope_C:.2f}")
         axes[1, j].set_title(f"oracle $G^*$\n$R^2_{{sep}}(G)$={r2_G:.2f}")
-        axes[1, j].set_xlabel("spatial frequency f (cpd)")
+        axes[1, j].set_xlabel("spatial frequency k (cpd)")
         if j == 0:
             axes[0, j].set_ylabel(r"input $C_q$: $\omega$ (rad/s)")
             axes[1, j].set_ylabel(r"oracle $G_q^*$: $\omega$ (rad/s)")

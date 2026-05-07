@@ -5,9 +5,9 @@ dominates over folded copies. This holds when the input spectrum has
 little power at spatial frequencies above the Nyquist of the mosaic,
 *at frequencies that contribute substantially to the optimization*.
 
-For a mosaic critically sampled at f_max (so k_s = 2 f_max), aliased
-copies arrive at radii f_max, 3 f_max, 5 f_max, ... For our band
-(f_max = 4 cyc/u), the first folded copy lives at 3 f_max = 12 cyc/u.
+For a mosaic critically sampled at k_max (so k_s = 2 k_max), aliased
+copies arrive at radii k_max, 3 k_max, 5 k_max, ... For our band
+(k_max = 4 cyc/u), the first folded copy lives at 3 k_max = 12 cyc/u.
 
 We compute the power-weighted ratio: how much of the total in-band
 spectral power would be added by aliased copies, relative to the direct
@@ -21,39 +21,39 @@ sys.path.insert(0, ".")
 import numpy as np
 
 from src.spectra import drift_spectrum
-from src.params import F_MAX, OMEGA_MIN, OMEGA_MAX
+from src.params import K_MAX, OMEGA_MIN, OMEGA_MAX
 
 
 def main():
-    f = np.geomspace(0.05, F_MAX, 80)
+    k = np.geomspace(0.05, K_MAX, 80)
     omega = np.geomspace(OMEGA_MIN, OMEGA_MAX, 80)
-    F, W = np.meshgrid(f, omega, indexing="ij")
+    K, W = np.meshgrid(k, omega, indexing="ij")
 
     D_values = [0.05, 0.5, 5.0, 50.0]
     beta = 2.0
 
-    df = np.gradient(f)[:, None]
+    dk = np.gradient(k)[:, None]
     domega = np.gradient(omega)[None, :]
-    weights = 2 * np.pi * F * df * domega
+    weights = 2 * np.pi * K * dk * domega
 
-    print(f"Band: f <= {F_MAX} cyc/u, {OMEGA_MIN} <= |omega| <= {OMEGA_MAX} rad/s")
+    print(f"Band: k <= {K_MAX} cyc/u, {OMEGA_MIN} <= |omega| <= {OMEGA_MAX} rad/s")
     print()
 
     for oversample in [1.0, 1.5, 2.0]:
-        k_s = 2 * F_MAX * oversample
-        print(f"=== Mosaic with k_s = {oversample:.1f} x (2 f_max) = {k_s:.1f} cyc/u ===")
+        k_s = 2 * K_MAX * oversample
+        print(f"=== Mosaic with k_s = {oversample:.1f} x (2 k_max) = {k_s:.1f} cyc/u ===")
         print(f"  {'D':>6}  {'direct power':>14}  {'aliased power':>14}  {'ratio':>10}")
         print(f"  {'-'*6}  {'-'*14}  {'-'*14}  {'-'*10}")
 
         for D in D_values:
-            C_direct = drift_spectrum(F, W, D=D, beta=beta)
+            C_direct = drift_spectrum(K, W, D=D, beta=beta)
             C_alias = np.zeros_like(C_direct)
             for m in range(-2, 3):
                 for n in range(-2, 3):
                     if m == 0 and n == 0:
                         continue
-                    f_alias = np.sqrt((F + m * k_s) ** 2 + (n * k_s) ** 2)
-                    C_alias = C_alias + drift_spectrum(f_alias, W, D=D, beta=beta)
+                    k_alias = np.sqrt((K + m * k_s) ** 2 + (n * k_s) ** 2)
+                    C_alias = C_alias + drift_spectrum(k_alias, W, D=D, beta=beta)
 
             P_direct = np.sum(C_direct * weights)
             P_alias = np.sum(C_alias * weights)
@@ -68,7 +68,7 @@ def main():
     print()
     print("Our figures use the direct spectrum (no aliasing), which corresponds")
     print("to the limit of fine over-sampling, or equivalently to assuming the")
-    print("mosaic spacing is set by something other than f_max (e.g., the")
+    print("mosaic spacing is set by something other than k_max (e.g., the")
     print("photoreceptor sampling rate, which in primates is much finer than")
     print("the cells whose RFs we're modelling).")
 

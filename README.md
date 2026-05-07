@@ -7,7 +7,7 @@ generates the figure and diagnostic artifacts in `outputs/`.
 
 The main code path is:
 
-1. Define an input spectrum `C_theta(f, omega)` with a `Spectrum.C(f, omega)`
+1. Define an input spectrum `C_theta(k, omega)` with a `Spectrum.C(k, omega)`
    object from `src/spectra.py`.
 2. Solve the Linsker/Jun efficient-coding problem with `src/solver.py`, usually
    through the shared pipeline in `src/pipeline.py`.
@@ -20,7 +20,7 @@ The main code path is:
 For a natural-image spectrum
 
 ```text
-C_I(f) = A / (f^2 + k0^2)^(beta/2)
+C_I(k) = A / (k^2 + k0^2)^(beta/2)
 ```
 
 and a movement-generated temporal redistribution, the code solves
@@ -35,7 +35,7 @@ The solver uses the closed-form KKT solution with bisection on the dual
 variable lambda. The integration band is controlled by `src/params.py`:
 
 ```text
-F_MAX = 6.0 cycles/deg
+K_MAX = 6.0 cycles/deg
 OMEGA_MIN = 0.5 rad/s
 OMEGA_MAX = 400.0 rad/s
 ```
@@ -295,7 +295,7 @@ config = SolveConfig(sigma_in=0.3, sigma_out=1.0, P0=50.0, grid="hi_res")
 
 results = run_many(specs, config, kernels=True)
 for spec, result in zip(specs, results):
-    print(spec.key, result.I, result.f_peak)
+    print(spec.key, result.I, result.k_peak)
 ```
 
 For a single custom spectrum:
@@ -312,7 +312,7 @@ extract_kernels(result)
 
 New analyses should define spectra once and reuse the shared pipeline.
 
-1. Add or reuse a `Spectrum` class in `src/spectra.py` with a `C(f, omega)`
+1. Add or reuse a `Spectrum` class in `src/spectra.py` with a `C(k, omega)`
    method.
 2. Add a small factory in `src/power_spectrum_library.py` that returns
    `SpectrumSpec` objects with readable keys, labels, parameters, and
@@ -328,7 +328,7 @@ shared entry point already exists.
 ## Cell-Class Model
 
 The cell-class workflow learns a small number of reusable nonnegative filter
-power spectra `H_c(f, omega)`. For each movement condition `q`, the model forms
+power spectra `H_c(k, omega)`. For each movement condition `q`, the model forms
 a condition-dependent mixture
 
 ```text
@@ -342,8 +342,8 @@ efficient-coding solver, not a squared-error fit to the oracle filters.
 The default condition stack is the direct saccade/drift pair:
 
 ```text
-saccade_A_4.4  = I(f) Q_saccade(A=4.4 deg)
-drift_D_0.0375 = I(f) Q_drift(D=0.0375 deg^2/s)
+saccade_A_4.4  = I(k) Q_saccade(A=4.4 deg)
+drift_D_0.0375 = I(k) Q_drift(D=0.0375 deg^2/s)
 ```
 
 `--condition-set movement_sweep` instead fits five saccade amplitudes and five
@@ -368,13 +368,13 @@ so the Torch-specific tests are skipped when Torch is not installed.
 
 ## Numerical Conventions
 
-- Spatial frequency `f` is radial frequency in cycles/degree.
+- Spatial frequency `k` is radial frequency in cycles/degree.
 - Temporal frequency `omega` is angular frequency in rad/s; Hz is
   `omega / (2*pi)`.
-- Brownian drift `D` is in deg^2/s and enters as `D * (2*pi*f)^2`.
-- Saccade amplitude `A` is in degrees and enters as `2*pi*f*A`.
-- Linear velocity scale `s` is in deg/s and enters as `2*pi*f*s`.
-- Radial integration uses the 2D spatial measure collapsed into `f df d omega`.
+- Brownian drift `D` is in deg^2/s and enters as `D * (2*pi*k)^2`.
+- Saccade amplitude `A` is in degrees and enters as `2*pi*k*A`.
+- Linear velocity scale `s` is in deg/s and enters as `2*pi*k*s`.
+- Radial integration uses the 2D spatial measure collapsed into `k dk d omega`.
 - The temporal grid is centered and uniform; kernel reconstruction uses
   `ifftshift` before FFT operations where needed.
 - The temporal kernel phase is recovered by cepstral minimum-phase

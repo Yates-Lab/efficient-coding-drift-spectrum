@@ -3,7 +3,7 @@
 This script is intentionally diagnostic.  It checks the unit conventions and
 basic invariants that must hold before the cell-class story is meaningful:
 
-1. Brownian drift half-width: omega_1/2(f) = D (2*pi*f)^2.
+1. Brownian drift half-width: omega_1/2(k) = D (2*pi*k)^2.
 2. Brownian drift temporal power conservation: ∫ Q dω/(2π) ≈ 1.
 3. Stationary separable control has near-perfect log-additive separability.
 4. Movement-generated spectra are nonseparable in log-additive coordinates.
@@ -26,7 +26,7 @@ import sys
 sys.path.insert(0, ".")
 
 from src.cell_class_figures import log_additive_separability_r2, normalize_for_plot
-from src.params import F_MAX, OMEGA_MIN, OMEGA_MAX, fast_grid
+from src.params import K_MAX, OMEGA_MIN, OMEGA_MAX, fast_grid
 from src.plotting import radial_weights, band_mask_radial, log_contourf, setup_style
 from src.power_spectrum_library import stationary_vs_active_story_specs
 from src.spectra import DriftSpectrum
@@ -69,7 +69,7 @@ def audit_brownian_drift(D: float, outdir: Path) -> dict:
     omega_max = 2500.0
     omega = np.linspace(-omega_max, omega_max, 200001)
     Q = DriftSpectrum(D=D).redistribution(f, omega)
-    integral = np.trapz(Q, omega, axis=1) / TWOPI
+    integral = np.trapezoid(Q, omega, axis=1) / TWOPI
 
     hw = np.array([measured_halfwidth(omega, Q[i]) for i in range(f.size)])
     theory = D * (TWOPI * f) ** 2
@@ -79,7 +79,7 @@ def audit_brownian_drift(D: float, outdir: Path) -> dict:
     fig, axes = plt.subplots(1, 2, figsize=(7.0, 2.8), constrained_layout=True)
     axes[0].loglog(f, theory, label=r"theory $D(2\pi f)^2$")
     axes[0].loglog(f[valid], hw[valid], "o", ms=3, label="measured")
-    axes[0].set_xlabel("spatial frequency f (cpd)")
+    axes[0].set_xlabel("spatial frequency k (cpd)")
     axes[0].set_ylabel(r"half-width $\omega_{1/2}$ (rad/s)")
     axes[0].set_title("Brownian drift unit check")
     axes[0].legend(fontsize=8)
@@ -87,7 +87,7 @@ def audit_brownian_drift(D: float, outdir: Path) -> dict:
 
     axes[1].semilogx(f, integral)
     axes[1].axhline(1.0, color="0.5", lw=1, ls="--")
-    axes[1].set_xlabel("spatial frequency f (cpd)")
+    axes[1].set_xlabel("spatial frequency k (cpd)")
     axes[1].set_ylabel(r"$\int Q d\omega/(2\pi)$")
     axes[1].set_title("Temporal power conservation")
     axes[1].grid(True, alpha=0.25)
@@ -106,13 +106,13 @@ def audit_brownian_drift(D: float, outdir: Path) -> dict:
 
 def audit_story_spectra(outdir: Path) -> list[dict]:
     f, omega = fast_grid()
-    weights = radial_weights(f, omega) * band_mask_radial(f, omega, F_MAX, OMEGA_MIN, OMEGA_MAX)
+    weights = radial_weights(f, omega) * band_mask_radial(f, omega, K_MAX, OMEGA_MIN, OMEGA_MAX)
     specs = stationary_vs_active_story_specs()
     rows = []
     C_list = []
 
     for spec in specs:
-        C = spec.spectrum.C(f, omega)
+        C = spec.spectrum.C(k, omega)
         C_list.append(C)
         rows.append({
             "key": spec.key,
@@ -133,7 +133,7 @@ def audit_story_spectra(outdir: Path) -> list[dict]:
         C_plot = normalize_for_plot(C[:, omega_pos])
         cf = log_contourf(axes[0, j], f, omega[omega_pos], C_plot.T, n_levels=18, cmap="magma", vmin_floor=1e-6)
         axes[0, j].set_title(f"{spec.title}\n$R^2_{{sep}}$={row['log_additive_separability_R2']:.2f}")
-        axes[0, j].set_xlabel("f (cpd)")
+        axes[0, j].set_xlabel("k (cpd)")
         if j == 0:
             axes[0, j].set_ylabel(r"$\omega$ (rad/s)")
         else:
@@ -176,7 +176,7 @@ def main():
         "brownian_drift": audit_brownian_drift(args.D, outdir),
         "story_spectra": audit_story_spectra(outdir),
         "notes": [
-            "Brownian drift should satisfy omega_1/2 = D (2*pi*f)^2 for f in cycles/deg.",
+            "Brownian drift should satisfy omega_1/2 = D (2*pi*k)^2 for k in cycles/deg.",
             "The separable stationary control should have R2_sep near 1 by construction.",
             "Log-additive R2 is a conservative diagnostic; smooth movement spectra can still have high R2.",
             "The temporal-centroid slope is the complementary coupling check: separable controls should have slope near zero.",

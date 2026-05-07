@@ -71,7 +71,7 @@ def save_class_spectra_plot(f, omega, fit, outdir: Path):
             cmap="viridis",
             vmin_floor=1e-5,
         )
-        ax.set_xlabel("f (cyc/unit)")
+        ax.set_xlabel("k (cyc/unit)")
         ax.set_ylabel(r"$\omega$ (rad/s)")
         ax.set_title(f"class {c}")
         fig.colorbar(cf, ax=ax, fraction=0.046, pad=0.02)

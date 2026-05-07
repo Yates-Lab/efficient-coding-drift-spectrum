@@ -95,8 +95,8 @@ def test_extract_temporal_kernel_populates_fields():
     assert r.temporal_t.shape == r.temporal_v.shape
     # Causal: t starts at 0
     np.testing.assert_allclose(r.temporal_t[0], 0.0, atol=1e-12)
-    # f_peak is set and reasonable
-    assert 0 < r.f_peak <= 5.0
+    # k_peak is set and reasonable
+    assert 0 < r.k_peak <= 5.0
 
 
 def test_extract_kernels_does_both():
@@ -122,7 +122,7 @@ def test_pipeline_saccade_drift_peak_ordering():
     r_saccade = run(SaccadeSpectrum(A=4.4), grid="hi_res")
     extract_temporal_kernel(r_drift)
     extract_temporal_kernel(r_saccade)
-    assert r_saccade.f_peak < r_drift.f_peak, (
-        f"Saccade peak f={r_saccade.f_peak:.3f} should be < "
-        f"drift peak f={r_drift.f_peak:.3f}"
+    assert r_saccade.k_peak < r_drift.k_peak, (
+        f"Saccade peak k={r_saccade.k_peak:.3f} should be < "
+        f"drift peak k={r_drift.k_peak:.3f}"
     )

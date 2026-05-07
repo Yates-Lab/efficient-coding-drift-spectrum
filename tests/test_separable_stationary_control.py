@@ -8,7 +8,7 @@ sys.path.insert(0, ".")
 import numpy as np
 
 from src.cell_class_figures import log_additive_separability_r2
-from src.params import F_MAX, OMEGA_MIN, OMEGA_MAX
+from src.params import K_MAX, OMEGA_MIN, OMEGA_MAX
 from src.plotting import band_mask_radial, radial_weights
 from src.spectra import (
     DEFAULT_IMAGE,
@@ -24,32 +24,32 @@ def test_temporal_lorentzian_power_conservation_on_wide_grid():
     omega0 = 10.0
     omega = np.linspace(-5000.0, 5000.0, 200001)
     Q = temporal_lorentzian(omega, omega0=omega0)
-    integral = np.trapz(Q, omega) / (2.0 * np.pi)
+    integral = np.trapezoid(Q, omega) / (2.0 * np.pi)
     assert abs(integral - 1.0) < 0.003
 
 
 def test_separable_movie_class_matches_free_function():
-    f = np.geomspace(0.05, 5.0, 20)
+    k = np.geomspace(0.05, 5.0, 20)
     omega = np.linspace(-100.0, 100.0, 101)
     s = SeparableMovieSpectrum(omega0=7.5)
     expected = separable_movie_spectrum(
-        f[:, None],
+        k[:, None],
         omega[None, :],
         omega0=7.5,
         beta=DEFAULT_IMAGE.beta,
         A=DEFAULT_IMAGE.A_image,
         k0=DEFAULT_IMAGE.k0,
     )
-    np.testing.assert_allclose(s.C(f, omega), expected, rtol=1e-12)
+    np.testing.assert_allclose(s.C(k, omega), expected, rtol=1e-12)
 
 
 def test_drift_spectrum_uses_cycles_aware_width():
-    f = np.array([0.5, 1.0, 2.0])
+    k = np.array([0.5, 1.0, 2.0])
     D = 0.0375
     omega = np.linspace(-1000.0, 1000.0, 20001)
-    Q = DriftSpectrum(D=D).redistribution(f, omega)
+    Q = DriftSpectrum(D=D).redistribution(k, omega)
     # At omega=a, Lorentzian falls to exactly half of its value at zero.
-    a = D * (2.0 * np.pi * f) ** 2
+    a = D * (2.0 * np.pi * k) ** 2
     for i, ai in enumerate(a):
         q0 = np.interp(0.0, omega, Q[i])
         qai = np.interp(ai, omega, Q[i])
@@ -69,10 +69,10 @@ def test_story_spectrum_set_includes_separable_control():
 
 
 def test_power_law_separable_control_has_exact_log_additive_score():
-    f = np.geomspace(0.05, 5.0, 120)
+    k = np.geomspace(0.05, 5.0, 120)
     omega = np.linspace(-500.0, 500.0, 1024)
-    C = SeparableMovieSpectrum(omega0=0.05).C(f, omega)
-    weights = radial_weights(f, omega) * band_mask_radial(
-        f, omega, F_MAX, OMEGA_MIN, OMEGA_MAX
+    C = SeparableMovieSpectrum(omega0=0.05).C(k, omega)
+    weights = radial_weights(k, omega) * band_mask_radial(
+        k, omega, K_MAX, OMEGA_MIN, OMEGA_MAX
     )
     assert log_additive_separability_r2(C, weights) > 0.999999

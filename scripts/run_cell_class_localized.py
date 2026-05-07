@@ -51,7 +51,7 @@ def save_spectra_plot(f, omega, fit, outdir: Path, tag: str):
         H = fit.H[c][:, omega_pos]
         H = H / max(float(np.nanmax(H)), 1e-300)
         cf = log_contourf(ax, f, omega[omega_pos], H.T, n_levels=18, cmap="viridis", vmin_floor=1e-5)
-        ax.set_xlabel("f (cyc/deg)")
+        ax.set_xlabel("k (cyc/deg)")
         ax.set_ylabel(r"$\omega$ (rad/s)")
         ax.set_title(f"class {c}")
         fig.colorbar(cf, ax=ax, fraction=0.046, pad=0.02)
@@ -76,7 +76,7 @@ def save_kernel_plot(fit, outdir: Path, tag: str):
     x = np.arange(fit.K)
     width = 0.35
     fig, ax1 = plt.subplots(figsize=(4.8, 3.0), constrained_layout=True)
-    ax1.bar(x - width / 2, fit.f_centroid_cpd, width, label="centroid cpd")
+    ax1.bar(x - width / 2, fit.k_centroid_cpd, width, label="centroid cpd")
     ax1.set_ylabel("spatial centroid (cyc/deg)")
     ax1.set_xticks(x)
     ax1.set_xticklabels([f"class {c}" for c in range(fit.K)])
@@ -204,8 +204,8 @@ def main():
                     "J": float(fit.J),
                     "regret": float(regret),
                     "rho0": fit.rho0.tolist(),
-                    "f_centroid_cpd": fit.f_centroid_cpd.tolist(),
-                    "f_log_std": fit.f_log_std.tolist(),
+                    "k_centroid_cpd": fit.k_centroid_cpd.tolist(),
+                    "k_log_std": fit.k_log_std.tolist(),
                     "spatial_rf_width_deg": fit.spatial_rf_width_deg.tolist(),
                     "R_loc": float(fit.R_loc),
                 }
@@ -220,8 +220,8 @@ def main():
                 delta_qc=fit.delta_qc,
                 I_q=fit.I_q,
                 regret_q=per_condition_regret(oracle.I_star_q, fit.I_q),
-                f_centroid_cpd=fit.f_centroid_cpd,
-                f_log_std=fit.f_log_std,
+                k_centroid_cpd=fit.k_centroid_cpd,
+                k_log_std=fit.k_log_std,
                 spatial_rf_width_deg=fit.spatial_rf_width_deg,
                 J=np.array(fit.J),
                 R_loc=np.array(fit.R_loc),

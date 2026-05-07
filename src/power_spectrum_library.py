@@ -25,9 +25,12 @@ from src.spectra import (
     SeparableMovieSpectrum,
 )
 
-DEFAULT_DRIFT_SWEEP = (0.05, 0.5, 2.0, 10.0, 50.0)
+DEFAULT_DRIFT_SWEEP = (0.005, 0.0125, 0.0375, 0.1, 0.25)
 DEFAULT_SACCADE_SWEEP = (0.5, 1.0, 2.0, 4.0, 8.0)
 DEFAULT_SEPARABLE_OMEGA0 = 0.05
+# Free-viewing fixational drift (Aytekin et al. 2014, Mostofi et al. 2020):
+# D ≈ 0.005-0.05 deg^2/sec.  0.0375 is the value used in Mostofi 2020.
+DEFAULT_DRIFT_D = 0.0375
 
 
 @dataclass(frozen=True)
@@ -93,7 +96,7 @@ def saccade_spectrum_specs(
             family="saccade",
             parameters=_params(A=A),
             color=color,
-            reference="cumulative-Gaussian saccade approximation",
+            reference="Mostofi et al. 2020 (cumulative-Gaussian saccade approximation)",
         )
         for A in A_values
     ]
@@ -183,7 +186,7 @@ def stationary_vs_active_story_specs() -> list[SpectrumSpec]:
             family="saccade",
             parameters=_params(A=4.4),
             color="tab:red",
-            reference="cumulative-Gaussian saccade approximation",
+            reference="Mostofi et al. 2020 (cumulative-Gaussian saccade approximation)",
         ),
         SpectrumSpec(
             key="drift_D_0.0375",
@@ -213,7 +216,7 @@ def saccade_drift_pair_specs(
             family="saccade",
             parameters=_params(A=A),
             color="tab:red",
-            reference="cumulative-Gaussian saccade approximation",
+            reference="Mostofi et al. 2020 (cumulative-Gaussian saccade approximation)",
         ),
         SpectrumSpec(
             key=f"drift_D_{D:g}",
@@ -237,9 +240,9 @@ def spectrum_comparison_spec_objects(*, include_controls: bool = True) -> list[S
                 key="drift_control",
                 label="drift",
                 title="Drift",
-                spectrum=DriftSpectrum(D=2.0),
+                spectrum=DriftSpectrum(D=DEFAULT_DRIFT_D),
                 family="drift",
-                parameters=_params(D=2.0),
+                parameters=_params(D=DEFAULT_DRIFT_D),
                 color="tab:blue",
             ),
             SpectrumSpec(
@@ -274,7 +277,7 @@ SPECTRUM_SET_DESCRIPTIONS = {
     "drift_sweep": "Brownian drift spectra parameterized by D.",
     "saccade_sweep": "Analytic saccade-transient spectra parameterized by A.",
     "linear_motion_sweep": "Gaussian linear-motion spectra parameterized by s.",
-    "separable_movie": "Stationary separable C_I(f) Q_T(omega) controls.",
+    "separable_movie": "Stationary separable C_I(k) Q_T(omega) controls.",
     "stationary_vs_active_story": "Separable control, Dong--Atick linear motion, saccade, and drift spectra.",
     "saccade_drift_pair": "Two-condition pair: saccade and Brownian drift.",
     "comparison_core": "Drift, saccade, Dong--Atick linear, and separable controls.",
@@ -314,6 +317,7 @@ __all__ = [
     "SpectrumSpec",
     "DEFAULT_DRIFT_SWEEP",
     "DEFAULT_SACCADE_SWEEP",
+    "DEFAULT_DRIFT_D",
     "drift_spectrum_specs",
     "saccade_spectrum_specs",
     "linear_motion_spectrum_specs",

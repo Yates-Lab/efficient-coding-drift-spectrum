@@ -83,9 +83,9 @@ def condition_labels(rows):
 def condition_title(row):
     name = row["name"]
     if name.startswith("saccade_"):
-        return "saccade: C = I(f) Q_saccade"
+        return "saccade: C = I(k) Q_saccade"
     if name.startswith("drift_"):
-        return "drift: C = I(f) Q_drift"
+        return "drift: C = I(k) Q_drift"
     return name.replace("_", " ")
 
 
@@ -147,7 +147,7 @@ def contour_panel(
         ax.set_title(title)
     if ylabel is not None:
         ax.set_ylabel(ylabel)
-    ax.set_xlabel("spatial frequency f (cpd)")
+    ax.set_xlabel("spatial frequency k (cpd)")
     return cf
 
 
@@ -163,7 +163,7 @@ def make_spectra_and_oracle_figure(data, rows, outdir: Path):
     if len(idx) == 1:
         axes = axes[:, None]
     for j, q in enumerate(idx):
-        cf0 = contour_panel(axes[0, j], f, omega, C[q], title=labels[j], ylabel="input spectrum\n$C_q(f,\\nu)$" if j == 0 else None, cmap="magma")
+        cf0 = contour_panel(axes[0, j], f, omega, C[q], title=labels[j], ylabel="input spectrum\n$C_q(k,\\nu)$" if j == 0 else None, cmap="magma")
         cf1 = contour_panel(axes[1, j], f, omega, G[q], ylabel="oracle filter\n$G_q^\\star=|v_q^\\star|^2$" if j == 0 else None, cmap="viridis")
     fig.colorbar(cf0, ax=axes[0, :].ravel().tolist(), fraction=0.025, pad=0.01, label="normalized power")
     fig.colorbar(cf1, ax=axes[1, :].ravel().tolist(), fraction=0.025, pad=0.01, label="normalized filter power")
@@ -267,7 +267,7 @@ def make_learned_class_figure(data, outdir: Path, K: int):
     if K == 1:
         axes = axes[:, None]
     for c in range(K):
-        contour_panel(axes[0, c], f, omega, H[c], title=f"class {c}", ylabel="class spectrum\n$H_c(f,\\omega)$" if c == 0 else None, cmap="viridis")
+        contour_panel(axes[0, c], f, omega, H[c], title=f"class {c}", ylabel="class spectrum\n$H_c(k,\\omega)$" if c == 0 else None, cmap="viridis")
         r, v_r = spatial_kernel_from_filter_power(H[c], f, omega, n_k=256)
         if np.max(np.abs(v_r)) > 0:
             v_r = v_r / np.max(np.abs(v_r))
@@ -278,14 +278,14 @@ def make_learned_class_figure(data, outdir: Path, K: int):
         if c == 0:
             axes[1, c].set_ylabel("normalized\nspatial kernel")
 
-        t, h_t, f_peak = temporal_kernel_from_filter_power(H[c], f, omega)
+        t, h_t, k_peak = temporal_kernel_from_filter_power(H[c], f, omega)
         if np.max(np.abs(h_t)) > 0:
             h_t = h_t / np.max(np.abs(h_t))
         axes[2, c].plot(t, h_t)
         axes[2, c].axhline(0, lw=0.6, alpha=0.5)
         axes[2, c].set_xlim(0, 0.6)
         axes[2, c].set_xlabel("time (s)")
-        axes[2, c].set_title(f"peak f={f_peak:.2g}")
+        axes[2, c].set_title(f"peak k={k_peak:.2g}")
         if c == 0:
             axes[2, c].set_ylabel("normalized\ntemporal kernel")
     fig.suptitle(f"Learned reusable class filters, K={K}")

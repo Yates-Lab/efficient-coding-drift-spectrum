@@ -8,6 +8,7 @@ sys.path.insert(0, ".")
 from pathlib import Path
 
 from src.power_spectrum_library import (
+    DEFAULT_DRIFT_D,
     drift_spectrum_specs,
     get_spectrum_set,
     list_spectrum_sets,
@@ -43,6 +44,15 @@ def test_spectrum_comparison_spec_objects_match_legacy_tuples():
     assert [s.label for s in objects] == [row[0] for row in tuples]
     assert [s.spectrum.describe() for s in objects] == [row[1].describe() for row in tuples]
     assert [s.color for s in objects] == [row[2] for row in tuples]
+
+
+def test_comparison_drift_uses_mostofi_default():
+    assert DEFAULT_DRIFT_D == 0.0375
+
+    drift = spectrum_comparison_spec_objects(include_controls=True)[0]
+    assert drift.key == "drift_control"
+    assert drift.parameters == {"D": 0.0375}
+    assert drift.spectrum.D == 0.0375
 
 
 def test_direct_spec_factories_are_plain_to_extend():

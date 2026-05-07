@@ -170,10 +170,17 @@ def plot_panels(
     title=None,
     cmap=CMAP,
     colorbar_label=None,
+    normalize_by="set",
 ):
     arrays = list(arrays)
     labels = list(labels)
-    _, vmax = shared_lims(arrays, floor=FLOOR)
+    if normalize_by == "set":
+        _, vmax = shared_lims(arrays, floor=FLOOR)
+        references = [vmax] * len(arrays)
+    elif normalize_by == "panel":
+        references = [row_reference([array]) for array in arrays]
+    else:
+        raise ValueError("normalize_by must be 'set' or 'panel'.")
 
     fig, axes = plt.subplots(
         1,
@@ -186,12 +193,12 @@ def plot_panels(
     )
     axes = axes.ravel()
 
-    for ax, array, label in zip(axes, arrays, labels):
+    for ax, array, label, reference in zip(axes, arrays, labels, references):
         panel_loglog(
             ax,
             k,
             omega,
-            array / vmax,
+            array / max(float(reference), 1e-300),
             FLOOR,
             1.0,
             n_levels=N_LEVELS,
@@ -311,9 +318,10 @@ fig, axes = plot_panels(
     omega,
     C_list,
     labels,
-    filename="fig1c_library.png",
+    filename="fig1d_library.png",
     title=r"Figure 1c  spectrum library $C_\theta(k, \omega)$",
-    colorbar_label=r"$C_\theta(k,\omega) / \max_\mathrm{set}\,C_\theta$",
+    colorbar_label=r"$C_\theta(k,\omega) / \max_\mathrm{panel}\,C_\theta$",
+    normalize_by="panel",
 )
 
 #%% Optimal filters under power constraint and input/output noise
@@ -352,9 +360,10 @@ fig, axes = plot_panels(
     omega,
     C_list,
     labels,
-    filename="fig1c_library.png",
+    filename="fig1c_saccade_fixate.png",
     title=r"Figure 1c  spectrum library $C_\theta(k, \omega)$",
-    colorbar_label=r"$C_\theta(k,\omega) / \max_\mathrm{set}\,C_\theta$",
+    colorbar_label=r"$C_\theta(k,\omega) / \max_\mathrm{panel}\,C_\theta$",
+    normalize_by="panel",
 )
 
 fig, axes = plot_panels(

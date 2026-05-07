@@ -11,6 +11,8 @@ Running the whole file as a normal script still writes the standard outputs:
   outputs/fig1b_boi_cycle.png
   outputs/fig1c_library.png
   outputs/fig1d_optimal_filters.png
+  outputs/fig1h_mp_frequency_kernels.png
+  outputs/fig1h_mp_kernel_slices.png
 """
 
 #%% Imports
@@ -48,6 +50,10 @@ from src.plotting import (
 from src.pipeline import solve_on_grid, spatial_kernel_slice
 from src.kernels import minimum_phase_temporal_filter, soft_band_taper
 from src.cell_class_localized import fit_cell_classes_localized
+from src.mp_kernels_casile_rucci import (
+    mp_kernel_curves,
+    spatiotemporal_filter_power,
+)
 
 setup_style()
 _ipython = globals().get("get_ipython", lambda: None)()
@@ -370,7 +376,7 @@ filter_C_list = C_list
 #%%
 
 #%% Approximate Non-stationary Oracle with cell classes with localized bandwidth
-K_CLASSES = 2
+K_CLASSES = 3
 LOC_WEIGHT = 0.25
 DELTA_MAX = 0.5
 LEARN_BASELINE_SHARE = True
@@ -444,6 +450,25 @@ fig, axes = plot_panels(
     title=rf"Cell-class approximation to oracle filters, $K={K_CLASSES}$",
     cmap="viridis",
     colorbar_label=r"$G_q(k,\omega) / \max_q G_q$",
+)
+
+
+#%% Plot Casile-Rucci M/P kernels in frequency domain
+mp_cells = ("M", "P")
+mp_filter_power = [
+    spatiotemporal_filter_power(k, omega, cell)
+    for cell in mp_cells
+]
+
+fig, axes = plot_panels(
+    k,
+    omega,
+    mp_filter_power,
+    [f"{cell} cell" for cell in mp_cells],
+    filename="fig1h_mp_frequency_kernels.png",
+    title=r"Casile-Rucci M/P kernels $|K(k)H(\omega)|^2$",
+    cmap="viridis",
+    colorbar_label=r"$|K H|^2 / \max_\mathrm{M,P}\,|K H|^2$",
 )
 
 
@@ -564,6 +589,65 @@ for ax in axes[1, len(KERNEL_TF_HZ_SLICES):]:
 axes[0, 0].legend(loc="best", fontsize=6.5, ncol=1)
 fig.suptitle("Kernel slices from the optimal filters", y=0.995, fontsize=11)
 _ = save_and_display(fig, "fig1e_kernel_slices.png")
+
+
+#%% Plot Casile-Rucci M/P kernels in the same slice-panel format
+MP_KERNEL_SPACE_MAX = 0.5
+KERNEL_TIME_MAX = .15
+MP_KERNEL_COLORS = {"M": "#0072B2", "P": "#D55E00"}
+mp_curves = mp_kernel_curves(
+    ("M", "P"),
+    r_max_deg=MP_KERNEL_SPACE_MAX,
+    n_r=1601,
+    sample_rate_hz=2048.0,
+    n_temporal_samples=KERNEL_N_OMEGA,
+)
+
+fig, axes = plt.subplots(
+    2,
+    max(len(KERNEL_K_SLICES), len(KERNEL_TF_HZ_SLICES)),
+    figsize=(3.0 * max(len(KERNEL_K_SLICES), len(KERNEL_TF_HZ_SLICES)), 5.6),
+    squeeze=False,
+    gridspec_kw={"hspace": 0.42, "wspace": 0.30},
+)
+
+for ax, k0 in zip(axes[0], KERNEL_K_SLICES):
+    for cell, curve in mp_curves.items():
+        ax.plot(
+            curve["t"],
+            normalize_curve(curve["temporal"]),
+            color=MP_KERNEL_COLORS[cell],
+            label=f"{cell} cell",
+        )
+    ax.set_xlim(0.0, KERNEL_TIME_MAX)
+    ax.axhline(0.0, color="0.75", lw=0.5)
+    ax.set_title(rf"temporal kernel at $k={k0:g}$")
+    ax.set_xlabel(r"$t$ (s)")
+    ax.set_ylabel(r"$h_t(t)$ / max")
+
+for ax, tf_hz in zip(axes[1], KERNEL_TF_HZ_SLICES):
+    for cell, curve in mp_curves.items():
+        ax.plot(
+            curve["r"],
+            normalize_curve(curve["spatial"]),
+            color=MP_KERNEL_COLORS[cell],
+            label=f"{cell} cell",
+        )
+    ax.set_xlim(-MP_KERNEL_SPACE_MAX, MP_KERNEL_SPACE_MAX)
+    ax.axhline(0.0, color="0.75", lw=0.5)
+    ax.axvline(0.0, color="0.85", lw=0.5)
+    ax.set_title(rf"spatial kernel at {tf_hz:g} Hz")
+    ax.set_xlabel(r"$r$ (deg)")
+    ax.set_ylabel(r"$K(r)$ / max")
+
+for ax in axes[0, len(KERNEL_K_SLICES):]:
+    ax.set_visible(False)
+for ax in axes[1, len(KERNEL_TF_HZ_SLICES):]:
+    ax.set_visible(False)
+
+axes[0, 0].legend(loc="best", fontsize=7.0, ncol=1)
+fig.suptitle("Casile-Rucci M/P kernels", y=0.995, fontsize=11)
+_ = save_and_display(fig, "fig1h_mp_kernel_slices.png")
 
 
 # %%

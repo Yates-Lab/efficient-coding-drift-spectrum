@@ -33,8 +33,8 @@ class Band:
     k_min for log-spaced sampling of k.
     """
     k_min: float = 0.01
-    k_max: float = 6.0
-    omega_min: float = 0.5
+    k_max: float = 100.0
+    omega_min: float = 0.1
     omega_max: float = 400.0
 
     # Default grid sizes used by fast_grid()/hi_res_grid()
@@ -49,8 +49,8 @@ class Band:
     def __init__(
         self,
         k_min: float = 0.01,
-        k_max: float = 6.0,
-        omega_min: float = 0.5,
+        k_max: float = 100.0,
+        omega_min: float = 0.1,
         omega_max: float = 400.0,
         n_k_fast: int = 120,
         n_omega_fast: int = 1024,

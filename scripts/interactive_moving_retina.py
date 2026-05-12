@@ -40,6 +40,7 @@ from src.noise import WhiteNoise, TemporalPowerLawNoise, ConeLikeNoise
 from src.solver import solve_on_grid, response_power_spend, mutual_information_density
 from src.plotting import setup_style, panel_loglog, plot_spectrum_filter_pair, radial_weights, band_mask_radial
 from src.kernels import spatial_kernel_slice, temporal_kernel_slice, default_slice_frequencies
+from src.mp_kernels import mp_filter_power
 
 setup_style()
 
@@ -174,6 +175,26 @@ for j, (name, spec_i, noise_i) in enumerate(cases):
     panel_loglog(axes[0, j], f, tf_hz, ri.C, f_min=band.f_min, f_max=band.f_max, tf_min_hz=band.tf_min_hz, tf_max_hz=band.tf_max_hz, cmap="magma", normalize=True, label=name + "\nC")
     panel_loglog(axes[1, j], f, tf_hz, ri.v_sq, f_min=band.f_min, f_max=band.f_max, tf_min_hz=band.tf_min_hz, tf_max_hz=band.tf_max_hz, cmap="coolwarm", normalize=True, label="|v|²")
 
+#%% Visualize published M/P kernels on the same grid
+mp_gamma = 1.0
+mp_rho = 1.0
+fig, axes = plt.subplots(1, 2, figsize=(6.2, 3.2), constrained_layout=True)
+for ax, cell in zip(axes, ["M", "P"]):
+    panel_loglog(
+        ax,
+        f,
+        tf_hz,
+        mp_filter_power(f, tf_hz, cell, gamma=mp_gamma, rho=mp_rho),
+        f_min=band.f_min,
+        f_max=band.f_max,
+        tf_min_hz=band.tf_min_hz,
+        tf_max_hz=band.tf_max_hz,
+        cmap="coolwarm",
+        normalize=True,
+        label=f"{cell} kernel |K(f)H(ν)|²",
+    )
+fig.suptitle(f"published M/P kernels, normalized per panel (gamma={mp_gamma:g}, rho={mp_rho:g})")
+
 #%% Reconstruct spatial and temporal slices from |v|²
 # Spatial: zero phase, centered at x=0.
 # Temporal: minimum phase, using the Hilbert/cepstrum construction.
@@ -208,13 +229,15 @@ axes[1].set_ylabel("normalized amplitude")
 axes[1].set_title(f"minimum-phase temporal slice at f≈{f0:.2g} cpd")
 
 #%% Show information density for the selected solve
-info_density = mutual_information_density(r.C, r.v_sq, r.input_noise_power, r.output_noise_power)
-fig, ax = plt.subplots(figsize=(4.4, 3.5), constrained_layout=True)
-panel_loglog(
-    ax, f, tf_hz, info_density,
-    f_min=band.f_min, f_max=band.f_max,
-    tf_min_hz=band.tf_min_hz, tf_max_hz=band.tf_max_hz,
-    cmap="viridis", normalize=True, label="information density",
-)
+
+fig, ax = plt.subplots(1, len(results),figsize=(10.4, 3.5), constrained_layout=True)
+for j, (name, r) in enumerate(results):
+    info_density = mutual_information_density(r.C, r.v_sq, r.input_noise_power, r.output_noise_power)
+    panel_loglog(
+        ax[j], f, tf_hz, info_density,
+        f_min=band.f_min, f_max=band.f_max,
+        tf_min_hz=band.tf_min_hz, tf_max_hz=band.tf_max_hz,
+        cmap="viridis", normalize=True, label="information density",
+    )
 
 # %%

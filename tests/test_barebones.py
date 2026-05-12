@@ -6,6 +6,7 @@ from src.noise import WhiteNoise, TemporalPowerLawNoise, ConeLikeNoise
 from src.solver import solve_on_grid, response_power_spend
 from src.plotting import radial_weights, band_mask_radial
 from src.kernels import temporal_kernel_slice, spatial_kernel_slice, default_slice_frequencies
+from src.mp_kernels import mp_filter_power, retinal_input_power_map, response_power_from_input
 
 
 def test_four_spectra_and_three_noises_are_finite():
@@ -54,3 +55,32 @@ def test_solver_spends_budget_and_kernels_reconstruct():
     assert t.shape == h.shape
     assert np.all(np.isfinite(s))
     assert np.all(np.isfinite(h))
+
+
+def test_mp_kernels_match_repo_grid_and_response_power_is_finite():
+    sf = np.geomspace(0.1, 30.0, 16)
+    tf = np.concatenate([-np.geomspace(0.1, 80.0, 20)[::-1], np.geomspace(0.1, 80.0, 20)])
+
+    for cell in ["M", "P"]:
+        power = mp_filter_power(sf, tf, cell)
+        np.testing.assert_allclose(power, mp_filter_power(sf, tf, cell, gamma=1.0, rho=1.0))
+        assert not np.allclose(power, mp_filter_power(sf, tf, cell, gamma=0.5, rho=1.0 / 1.6))
+        assert power.shape == (sf.size, tf.size)
+        assert np.all(np.isfinite(power))
+        assert np.all(power >= 0)
+        assert np.max(power) > 0
+
+    tf_fft, P_input = retinal_input_power_map(
+        sf[:5],
+        duration_s=0.2,
+        sample_rate_hz=200.0,
+        n_trials=2,
+        n_orientations=2,
+        n_phases=2,
+        ramp_s=0.02,
+        seed=3,
+    )
+    response = response_power_from_input(sf[:5], tf_fft, P_input, "M")
+    assert response.shape == P_input.shape
+    assert np.all(np.isfinite(response))
+    assert np.all(response >= 0)

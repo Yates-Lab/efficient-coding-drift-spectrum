@@ -1,314 +1,129 @@
-"""Publication-style matplotlib config and grid/integration utilities."""
-
-from __future__ import annotations
+"""Small plotting and integration helpers."""
 
 import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 
 
-# ---------------------------------------------------------------------------
-# Style
-# ---------------------------------------------------------------------------
-
-PUB_RC = {
-    "font.size": 9,
-    "font.family": "serif",
-    "mathtext.fontset": "cm",
-    "axes.linewidth": 0.6,
-    "axes.labelsize": 9,
-    "axes.titlesize": 9.5,
-    "xtick.labelsize": 8,
-    "ytick.labelsize": 8,
-    "xtick.direction": "out",
-    "ytick.direction": "out",
-    "xtick.major.size": 3.0,
-    "ytick.major.size": 3.0,
-    "xtick.minor.size": 1.7,
-    "ytick.minor.size": 1.7,
-    "xtick.major.width": 0.55,
-    "ytick.major.width": 0.55,
-    "xtick.minor.width": 0.4,
-    "ytick.minor.width": 0.4,
-    "legend.fontsize": 7.5,
-    "legend.frameon": False,
-    "figure.dpi": 110,
-    "savefig.dpi": 320,
-    "savefig.bbox": "tight",
-    "savefig.pad_inches": 0.05,
-    "lines.linewidth": 1.1,
-    "axes.spines.top": False,
-    "axes.spines.right": False,
-}
-
-
 def setup_style():
-    mpl.rcParams.update(PUB_RC)
+    mpl.rcParams.update({
+        "font.size": 9,
+        "font.family": "serif",
+        "mathtext.fontset": "cm",
+        "axes.linewidth": 0.7,
+        "axes.spines.top": False,
+        "axes.spines.right": False,
+        "figure.dpi": 120,
+        "savefig.dpi": 220,
+    })
 
 
-# Two-color sequential ordering for parameter sweeps
-def parameter_palette(n, cmap="viridis", lo=0.10, hi=0.90):
-    cm = plt.get_cmap(cmap)
-    return [cm(x) for x in np.linspace(lo, hi, n)]
+def trapezoid_weights_1d(x):
+    x = np.asarray(x, dtype=float)
+    if x.size == 1:
+        return np.ones_like(x)
+    w = np.empty_like(x)
+    w[0] = 0.5 * (x[1] - x[0])
+    w[-1] = 0.5 * (x[-1] - x[-2])
+    w[1:-1] = 0.5 * (x[2:] - x[:-2])
+    return np.abs(w)
 
 
-# ---------------------------------------------------------------------------
-# Shared plotting primitives
-# ---------------------------------------------------------------------------
+def radial_weights(f, tf_hz):
+    """Simple radial integration weights for 2D spatial frequency + time.
 
-def log_grid(x_min, x_max, n):
-    """Return a positive logarithmic grid."""
-    if x_min <= 0 or x_max <= 0:
-        raise ValueError("log_grid bounds must be positive")
-    if n < 2:
-        raise ValueError("log_grid requires at least two points")
-    return np.geomspace(float(x_min), float(x_max), int(n))
-
-
-def radial_log_grid(
-    n_k=200,
-    n_omega=200,
-    *,
-    k_min=0.1,
-    k_max=6.0,
-    omega_min=0.25,
-    omega_max=400.0,
-    n_f=None,
-    f_min=None,
-    f_max=None,
-):
-    """Positive log-spaced (k, omega) display grid for spectrum panels."""
-    if n_f is not None:
-        n_k = n_f
-    if f_min is not None:
-        k_min = f_min
-    if f_max is not None:
-        k_max = f_max
-    return (
-        log_grid(k_min, k_max, n_k),
-        log_grid(omega_min, omega_max, n_omega),
-    )
-
-
-def positive_frequency(omega, *, temporal_hz=False):
-    """Return a positive-frequency mask and display-axis values."""
-    omega = np.asarray(omega, dtype=float)
-    mask = omega > 0
-    y = omega[mask]
-    if temporal_hz:
-        y = y / (2.0 * np.pi)
-    return mask, y
-
-
-def finite_positive_values(arrays):
-    """Flatten one or more arrays to finite positive values."""
-    vals = np.concatenate([np.asarray(a, dtype=float).ravel() for a in arrays])
-    return vals[np.isfinite(vals) & (vals > 0)]
-
-
-def shared_lims(arrays, *, floor=1e-6, percentile=None):
-    """Return shared positive log-color limits for one or more arrays."""
-    vals = finite_positive_values(arrays)
-    if vals.size == 0:
-        return float(floor), 1.0
-    vmax = float(np.nanpercentile(vals, percentile)) if percentile is not None else float(vals.max())
-    vmax = max(vmax, 1e-300)
-    return max(float(floor) * vmax, 1e-300), vmax
-
-
-def log_levels(vmin, vmax, n_levels):
-    """Return log-spaced contour levels with safe positive bounds."""
-    vmin = max(float(vmin), 1e-300)
-    vmax = max(float(vmax), vmin * (1.0 + 1e-12))
-    return np.geomspace(vmin, vmax, int(n_levels))
-
-
-def add_log_colorbar(
-    fig,
-    rect,
-    *,
-    cmap="magma",
-    vmin=1e-6,
-    vmax=1.0,
-    label=None,
-    orientation="vertical",
-    extend="min",
-    tick_labelsize=7,
-):
-    """Add a standalone log-scaled colorbar at ``rect`` in figure coords."""
-    cax = fig.add_axes(rect)
-    vmin = max(float(vmin), 1e-300)
-    vmax = max(float(vmax), vmin * (1.0 + 1e-12))
-    cb = mpl.colorbar.ColorbarBase(
-        cax,
-        cmap=plt.get_cmap(cmap),
-        norm=mpl.colors.LogNorm(vmin=vmin, vmax=vmax),
-        orientation=orientation,
-        extend=extend,
-    )
-    cb.ax.tick_params(direction="out", labelsize=tick_labelsize)
-    if label is not None:
-        cb.set_label(label)
-    return cb
-
-
-def add_band_edges(
-    ax,
-    *,
-    k_max=None,
-    omega_min=None,
-    omega_max=None,
-    f_max=None,
-    color="white",
-    lw=0.5,
-    ls=":",
-    alpha=0.6,
-):
-    """Overlay standard spatial and temporal band edges on a panel."""
-    if f_max is not None:
-        k_max = f_max
-    if k_max is not None:
-        ax.axvline(k_max, color=color, lw=lw, ls=ls, alpha=alpha)
-    if omega_min is not None:
-        ax.axhline(omega_min, color=color, lw=lw, ls=ls, alpha=alpha)
-    if omega_max is not None:
-        ax.axhline(omega_max, color=color, lw=lw, ls=ls, alpha=alpha)
-
-
-# ---------------------------------------------------------------------------
-# Log contour plots
-# ---------------------------------------------------------------------------
-
-def log_contourf(
-    ax,
-    x,
-    y,
-    Z,
-    n_levels=20,
-    cmap="magma",
-    vmin_floor=1e-6,
-    logx=True,
-    logy=True,
-    label=None,
-    extend="both",
-    vmin=None,
-    vmax=None,
-):
-    """contourf with logarithmic color scale and (optionally) log axes.
-
-    Z is positive (or near-positive). Values <= 0 are floored to vmin_floor*max.
+    The constant 2π factors are omitted because they only rescale information and
+    budget units.  The important part is the radial spatial measure f df dν.
     """
-    Zp = np.where(np.isfinite(Z) & (Z > 0), Z, np.nan)
-    zmax = float(vmax) if vmax is not None else np.nanmax(Zp)
-    if not np.isfinite(zmax) or zmax <= 0:
-        zmax = 1.0
-    floor = max(float(vmin) if vmin is not None else vmin_floor * zmax, 1e-300)
-    Zc = np.where(np.isnan(Zp), floor, np.maximum(Zp, floor))
-    levels = log_levels(floor, zmax, n_levels)
-    cf = ax.contourf(x, y, Zc, levels=levels,
-                     norm=mpl.colors.LogNorm(vmin=floor, vmax=zmax),
-                     cmap=cmap, extend=extend)
-    if logx:
-        ax.set_xscale("log")
-    if logy:
-        ax.set_yscale("log")
-    return cf
+    f = np.asarray(f, dtype=float)
+    tf_hz = np.asarray(tf_hz, dtype=float)
+    wf = trapezoid_weights_1d(f)
+    wt = trapezoid_weights_1d(tf_hz)
+    return (f * wf)[:, None] * wt[None, :]
+
+
+def band_mask_radial(f, tf_hz, f_max, tf_min_hz, tf_max_hz):
+    f = np.asarray(f, dtype=float)
+    tf_hz = np.asarray(tf_hz, dtype=float)
+    return (f[:, None] <= f_max) & (np.abs(tf_hz)[None, :] >= tf_min_hz) & (np.abs(tf_hz)[None, :] <= tf_max_hz)
+
+
+def radial_log_grid(n_f=180, n_tf=180, f_min=0.01, f_max=100.0, tf_min_hz=0.01, tf_max_hz=120.0):
+    return np.geomspace(f_min, f_max, int(n_f)), np.geomspace(tf_min_hz, tf_max_hz, int(n_tf))
+
+
+def _positive_branch(tf_hz, Z):
+    tf_hz = np.asarray(tf_hz, dtype=float)
+    Z = np.asarray(Z, dtype=float)
+    if np.any(tf_hz < 0):
+        keep = tf_hz > 0
+        return tf_hz[keep], Z[:, keep]
+    return tf_hz, Z
 
 
 def panel_loglog(
     ax,
-    k,
-    omega,
-    C,
-    vmin=None,
-    vmax=None,
-    n_levels=24,
-    cmap="magma",
-    k_min=0.1,
-    k_max=6.0,
-    omega_min=0.25,
-    omega_max=400.0,
+    f,
+    tf_hz,
+    Z,
     *,
     f_min=None,
     f_max=None,
-    positive_only=False,
-    temporal_hz=False,
-    transpose=True,
-    extend="both",
+    tf_min_hz=None,
+    tf_max_hz=None,
+    cmap="magma",
+    vmin=None,
+    vmax=None,
+    n_levels=24,
+    normalize=False,
+    floor_rel=1e-10,
+    colorbar=False,
+    label=None,
 ):
-    """Plot C with shape (Nk, Nomega) as a log-log contourf in (k, omega)."""
-    if f_min is not None:
-        k_min = f_min
-    if f_max is not None:
-        k_max = f_max
-    y = np.asarray(omega, dtype=float)
-    Z_source = np.asarray(C, dtype=float)
-    if positive_only:
-        mask, y = positive_frequency(y, temporal_hz=temporal_hz)
-        Z_source = Z_source[:, mask]
-    elif temporal_hz:
-        y = y / (2.0 * np.pi)
+    """Log-log contour plot for arrays with shape (len(f), len(tf_hz)).
 
-    if vmin is None or vmax is None:
-        auto_vmin, auto_vmax = shared_lims([Z_source], floor=1e-6)
-        vmin = auto_vmin if vmin is None else vmin
-        vmax = auto_vmax if vmax is None else vmax
+    If ``tf_hz`` is symmetric, only positive temporal frequencies are shown.
+    """
+    f = np.asarray(f, dtype=float)
+    tf_plot, Zp = _positive_branch(tf_hz, Z)
+    Zp = np.asarray(Zp, dtype=float)
 
-    Z = Z_source.T if transpose else Z_source
-    Z = np.where(np.isfinite(Z) & (Z > 0), Z, vmin)
-    Z = np.maximum(Z, vmin)
-    levels = log_levels(vmin, vmax, n_levels)
-    cf = ax.contourf(
-        k, y, Z, levels=levels,
-        norm=mpl.colors.LogNorm(vmin=vmin, vmax=vmax),
-        cmap=cmap, extend=extend,
-    )
+    good = np.isfinite(Zp) & (Zp > 0)
+    zmax = np.nanmax(np.where(good, Zp, np.nan))
+    if not np.isfinite(zmax) or zmax <= 0:
+        zmax = 1.0
+
+    if normalize:
+        Zp = Zp / zmax
+        zmax = 1.0
+
+    if vmax is None:
+        vmax = zmax
+    if vmin is None:
+        vmin = max(floor_rel * float(vmax), 1e-300)
+
+    Zp = np.where(np.isfinite(Zp) & (Zp > 0), Zp, vmin)
+    Zp = np.clip(Zp, vmin, vmax)
+    levels = np.geomspace(max(vmin, 1e-300), max(vmax, vmin * 1.001), int(n_levels))
+
+    cf = ax.contourf(f, tf_plot, Zp.T, levels=levels, norm=mpl.colors.LogNorm(vmin=vmin, vmax=vmax), cmap=cmap, extend="both")
     ax.set_xscale("log")
     ax.set_yscale("log")
-    if k_min is not None and k_max is not None:
-        ax.set_xlim(k_min, k_max)
-    if omega_min is not None and omega_max is not None:
-        if temporal_hz:
-            omega_min = omega_min / (2.0 * np.pi)
-            omega_max = omega_max / (2.0 * np.pi)
-        ax.set_ylim(omega_min, omega_max)
+    ax.set_xlim(f_min if f_min is not None else f.min(), f_max if f_max is not None else f.max())
+    ax.set_ylim(tf_min_hz if tf_min_hz is not None else tf_plot.min(), tf_max_hz if tf_max_hz is not None else tf_plot.max())
+    ax.set_xlabel("spatial frequency f (cycles/deg)")
+    ax.set_ylabel("temporal frequency ν (Hz)")
+    if label is not None:
+        ax.set_title(label)
+    if colorbar:
+        plt.colorbar(cf, ax=ax, fraction=0.046, pad=0.03)
     return cf
 
 
-# ---------------------------------------------------------------------------
-# Integration weights for radial (k, omega) grids
-# ---------------------------------------------------------------------------
-
-def trapezoid_weights_1d(x):
-    """1D trapezoidal weights for arbitrary 1D grid."""
-    x = np.asarray(x, dtype=float)
-    w = np.zeros_like(x)
-    if x.size == 1:
-        return np.ones_like(x)
-    w[0] = 0.5 * (x[1] - x[0])
-    w[-1] = 0.5 * (x[-1] - x[-2])
-    w[1:-1] = 0.5 * (x[2:] - x[:-2])
-    return w
-
-
-def radial_weights(k, omega):
-    """Build integration weights for I = (1/(2π)^2) ∫ k dk dω · g(k, ω).
-
-    Returns weights w(k, ω) such that np.sum(g * w) ≈ I.
-    """
-    k = np.asarray(k, dtype=float)
-    omega = np.asarray(omega, dtype=float)
-    wk = trapezoid_weights_1d(k)
-    ww = trapezoid_weights_1d(omega)
-    W = (k * wk)[:, None] * ww[None, :] / (2.0 * np.pi) ** 2
-    return W
-
-
-def band_mask_radial(k, omega, k_max, omega_min, omega_max):
-    """Boolean mask of (k, ω) inside the band B = [0, k_max] × {ω: ω_min <= |ω| <= ω_max}.
-
-    Returns a 2D mask matching np.broadcast(k[:,None], ω[None,:]).
-    """
-    K = k[:, None]
-    W = omega[None, :]
-    return (K <= k_max) & (np.abs(W) >= omega_min) & (np.abs(W) <= omega_max)
+def plot_spectrum_filter_pair(f, tf_hz, C, v_sq, band, *, title="", normalize=True):
+    fig, axes = plt.subplots(1, 2, figsize=(8.5, 3.4), constrained_layout=True)
+    panel_loglog(axes[0], f, tf_hz, C, f_min=band.f_min, f_max=band.f_max, tf_min_hz=band.tf_min_hz, tf_max_hz=band.tf_max_hz, cmap="magma", normalize=normalize, label="Signal spectrum")
+    panel_loglog(axes[1], f, tf_hz, v_sq, f_min=band.f_min, f_max=band.f_max, tf_min_hz=band.tf_min_hz, tf_max_hz=band.tf_max_hz, cmap="coolwarm", normalize=normalize, label="Optimal filter |v|²")
+    if title:
+        fig.suptitle(title)
+    return fig, axes

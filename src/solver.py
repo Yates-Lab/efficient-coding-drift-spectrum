@@ -1,183 +1,179 @@
-"""Linsker/Jun optimal-filter solver and mutual-information evaluation.
+"""Closed-form efficient-coding solver.
 
-Solves the constrained optimization (eq. 20 in the appendix):
+Given signal power C(f,ν), input-noise power S(f,ν), output-noise power N(f,ν),
+and response-power budget P0, solve for
 
-    max_{|v|^2 >= 0}  ∫_B Iθ(v; k, ω) dμ
-    subject to        ∫_B |v|^2 (Cθ + σ_in^2) dμ = P_0
+    g(f,ν) = |v(f,ν)|².
 
-where dμ = d²k dω / (2π)^3 (or, for radial integrals, k dk dω / (2π)^2),
-and B is the band ΩNyq × Ωt.
+The information density is
 
-Closed-form solution (eq. 23, numerically stabilized):
+    log((g(C+S)+N)/(gS+N))
 
-    |v*|^2 = σ_out^2 / (C + σ_in^2) * [ 2/(λ σ_out^2) / (sqrt(1+x)+1) - 1 ]_+
-    x = 4 σ_in^2 / (λ σ_out^2 C)
+and the budget is
 
-with λ chosen by bisection so that the budget constraint is satisfied.
+    sum g(C+S) weights = P0.
+
+The pointwise KKT solution is analytic.  A scalar Lagrange multiplier λ is found
+by bisection so that the total budget is exactly spent.
 """
 
-from __future__ import annotations
-
+from dataclasses import dataclass
 import numpy as np
 from scipy.optimize import brentq
 
-
-__all__ = [
-    "optimal_filter_squared_magnitude",
-    "find_lambda",
-    "mutual_information_density",
-    "mutual_information",
-    "solve_efficient_coding",
-    "active_threshold_C",
-]
+from .noise import evaluate_noise, WhiteNoise
+from .plotting import radial_weights, band_mask_radial
 
 
-# ---------------------------------------------------------------------------
-# Closed-form filter solution
-# ---------------------------------------------------------------------------
+@dataclass
+class Result:
+    spectrum: object
+    f: np.ndarray
+    tf_hz: np.ndarray
+    C: np.ndarray
+    input_noise_power: np.ndarray
+    output_noise_power: np.ndarray
+    v_sq: np.ndarray
+    lam: float
+    I: float
+    P0: float
 
-def optimal_filter_squared_magnitude(C, sigma_in, sigma_out, lam, band_mask=None):
-    """Optimal |v(k,ω)|^2 (eq. 23) given Lagrange multiplier λ.
 
-    Parameters
-    ----------
-    C : ndarray
-        Input power spectrum Cθ(k, ω) on the analysis grid.
-    sigma_in, sigma_out : float
-        Input and output noise standard deviations.
-    lam : float
-        Lagrange multiplier. Smaller λ => more total response power.
-    band_mask : ndarray of bool, optional
-        Mask of frequencies inside the band B. Outside the band, |v|^2 is set to 0.
+def _as_power_array(x, shape, name):
+    arr = np.asarray(x, dtype=float)
+    if arr.ndim == 0:
+        arr = np.full(shape, float(arr), dtype=float)
+    else:
+        arr = np.broadcast_to(arr, shape).astype(float, copy=False)
+    if not np.all(np.isfinite(arr)):
+        raise ValueError(f"{name} must be finite")
+    return arr
 
-    Returns
-    -------
-    v_sq : ndarray, same shape as C
-    """
+
+def optimal_filter_squared_magnitude(C, S, N, lam, band_mask=None):
+    """Return optimal |v|² for a fixed λ."""
     C = np.asarray(C, dtype=float)
-    s_in2 = float(sigma_in) ** 2
-    s_out2 = float(sigma_out) ** 2
+    S = _as_power_array(S, C.shape, "input noise S")
+    N = _as_power_array(N, C.shape, "output noise N")
+    lam = float(lam)
 
-    v_sq = np.zeros_like(C)
+    if np.any(C < 0) or np.any(S < 0) or np.any(N <= 0):
+        raise ValueError("C>=0, S>=0, and N>0 are required")
 
-    # Only frequencies with strictly positive power can receive gain.
-    if band_mask is None:
-        active_grid = C > 0
-    else:
-        active_grid = (C > 0) & band_mask
+    active = C > 0
+    if band_mask is not None:
+        active &= np.asarray(band_mask, dtype=bool)
 
-    if not np.any(active_grid):
-        return v_sq
+    g = np.zeros_like(C)
+    if not np.any(active):
+        return g
 
-    Cg = C[active_grid]
+    Cg = C[active]
+    Sg = S[active]
+    Ng = N[active]
 
-    if s_in2 == 0.0:
-        # Water-filling: p*C = (1/λ - σ_out²)_+
-        spend = np.maximum(1.0 / lam - s_out2, 0.0)
-        v_sq_active = np.where(Cg > 0, spend / Cg, 0.0)
-    else:
-        # Stable form using sqrt(1+x)+1 in denominator.
-        x = 4.0 * s_in2 / (lam * s_out2 * Cg)
-        sqrt_term = np.sqrt(1.0 + x)
-        bracket = (2.0 / (lam * s_out2)) / (sqrt_term + 1.0) - 1.0
-        v_sq_active = (s_out2 / (Cg + s_in2)) * np.maximum(bracket, 0.0)
+    with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
+        # Algebraically stable form of the KKT solution.
+        x = 4.0 * Sg / (lam * Ng * Cg)
+        bracket = (2.0 / (lam * Ng)) / (np.sqrt(1.0 + x) + 1.0) - 1.0
+        g_active = (Ng / (Cg + Sg)) * np.maximum(bracket, 0.0)
 
-    v_sq[active_grid] = v_sq_active
-    return v_sq
+    g[active] = np.where(np.isfinite(g_active), np.maximum(g_active, 0.0), 0.0)
+    return g
 
 
-def active_threshold_C(sigma_in, sigma_out, lam):
-    """Threshold C below which |v*|^2 = 0 (sigma_in > 0 case).
-
-    From bracket > 0:  2/(λ σ_out²) > sqrt(1+x)+1  =>  x < (2/(λ σ_out²) - 1)^2 - 1
-    => C > σ_in^2 λ σ_out² / (1 - λ σ_out²)
-    """
-    if sigma_in == 0:
-        return 0.0
-    s_out2 = sigma_out ** 2
-    if lam * s_out2 >= 1.0:
-        return np.inf  # No frequency is active
-    return sigma_in ** 2 * lam * s_out2 / (1.0 - lam * s_out2)
+def response_power_spend(C, v_sq, weights, input_noise):
+    """sum |v|² (C+S) weights."""
+    C = np.asarray(C, dtype=float)
+    S = _as_power_array(input_noise, C.shape, "input_noise")
+    return float(np.sum(np.asarray(v_sq, dtype=float) * (C + S) * np.asarray(weights, dtype=float)))
 
 
-# ---------------------------------------------------------------------------
-# Lambda from budget
-# ---------------------------------------------------------------------------
+def mutual_information_density(C, v_sq, input_noise, output_noise):
+    C = np.asarray(C, dtype=float)
+    S = _as_power_array(input_noise, C.shape, "input_noise")
+    N = _as_power_array(output_noise, C.shape, "output_noise")
+    g = np.asarray(v_sq, dtype=float)
+    return np.log((g * (C + S) + N) / (g * S + N))
 
-def _budget_spend(C, sigma_in, sigma_out, lam, weights, band_mask=None):
-    v_sq = optimal_filter_squared_magnitude(C, sigma_in, sigma_out, lam, band_mask)
-    return float(np.sum(v_sq * (C + sigma_in ** 2) * weights))
+
+def mutual_information(C, v_sq, weights, input_noise, output_noise):
+    return float(np.sum(mutual_information_density(C, v_sq, input_noise, output_noise) * weights))
 
 
-def find_lambda(C, sigma_in, sigma_out, P0, weights, band_mask=None,
-                lam_lo=1e-12, lam_hi=1e12, xtol=1e-14, rtol=1e-12):
-    """Solve for λ such that ∫ |v*|^2 (C + σ_in^2) dμ = P0.
-
-    The budget spend is monotonically decreasing in λ, so we use bisection
-    after expanding the bracket if needed.
-    """
+def find_lambda(C, S, N, weights, P0, band_mask=None):
+    """Find λ by solving spend(λ)=P0.  Spend decreases monotonically in λ."""
+    C = np.asarray(C, dtype=float)
+    S = _as_power_array(S, C.shape, "input noise S")
+    N = _as_power_array(N, C.shape, "output noise N")
+    weights = np.asarray(weights, dtype=float)
     P0 = float(P0)
 
-    def f(lam):
-        return _budget_spend(C, sigma_in, sigma_out, lam, weights, band_mask) - P0
+    if P0 <= 0:
+        return 1e12
 
-    # Expand bracket: at small λ spend is huge, at large λ spend is 0.
-    flo = f(lam_lo)
-    while flo < 0 and lam_lo > 1e-30:
-        lam_lo *= 0.01
-        flo = f(lam_lo)
-    fhi = f(lam_hi)
-    while fhi > 0 and lam_hi < 1e30:
-        lam_hi *= 100.0
-        fhi = f(lam_hi)
+    def spend(lam):
+        g = optimal_filter_squared_magnitude(C, S, N, lam, band_mask=band_mask)
+        return np.sum(g * (C + S) * weights)
 
-    if flo <= 0:
-        # Even at the smallest λ the spend is 0: degenerate case (no signal).
-        return lam_lo
-    if fhi >= 0:
-        # Budget is unreachable from above: clamp.
-        return lam_hi
+    def objective(lam):
+        return spend(lam) - P0
 
-    return brentq(f, lam_lo, lam_hi, xtol=xtol, rtol=rtol, maxiter=200)
+    lo = 1e-14
+    hi = 1e14
+    while objective(lo) < 0 and lo > 1e-300:
+        lo *= 0.01
+    while objective(hi) > 0 and hi < 1e300:
+        hi *= 100.0
 
-
-# ---------------------------------------------------------------------------
-# Mutual information
-# ---------------------------------------------------------------------------
-
-def mutual_information_density(C, v_sq, sigma_in, sigma_out):
-    """Per-frequency MI density (eq. 18), in nats.
-
-        I(k,ω) = log[(|v|^2(C + σ_in^2) + σ_out^2) / (|v|^2 σ_in^2 + σ_out^2)]
-    """
-    s_in2 = sigma_in ** 2
-    s_out2 = sigma_out ** 2
-    num = v_sq * (C + s_in2) + s_out2
-    den = v_sq * s_in2 + s_out2
-    return np.log(num / den)
+    if objective(lo) <= 0:
+        return lo
+    if objective(hi) >= 0:
+        return hi
+    return float(brentq(objective, lo, hi, xtol=1e-13, rtol=1e-11, maxiter=300))
 
 
-def mutual_information(C, v_sq, sigma_in, sigma_out, weights):
-    """Total MI integrated over the band, in nats."""
-    return float(
-        np.sum(mutual_information_density(C, v_sq, sigma_in, sigma_out) * weights)
-    )
-
-
-# ---------------------------------------------------------------------------
-# Driver
-# ---------------------------------------------------------------------------
-
-def solve_efficient_coding(C, sigma_in, sigma_out, P0, weights, band_mask=None):
-    """Find optimal filter and compute the optimized mutual information.
-
-    Returns
-    -------
-    v_sq : ndarray
-    lam : float
-    I : float
-    """
-    lam = find_lambda(C, sigma_in, sigma_out, P0, weights, band_mask)
-    v_sq = optimal_filter_squared_magnitude(C, sigma_in, sigma_out, lam, band_mask)
-    I = mutual_information(C, v_sq, sigma_in, sigma_out, weights)
+def solve_efficient_coding(C, input_noise, output_noise, weights, P0, band_mask=None):
+    """Solve the efficient-coding problem for arrays C, S, N."""
+    C = np.asarray(C, dtype=float)
+    S = _as_power_array(input_noise, C.shape, "input_noise")
+    N = _as_power_array(output_noise, C.shape, "output_noise")
+    weights = np.asarray(weights, dtype=float)
+    lam = find_lambda(C, S, N, weights, P0, band_mask=band_mask)
+    v_sq = optimal_filter_squared_magnitude(C, S, N, lam, band_mask=band_mask)
+    I = mutual_information(C, v_sq, weights, S, N)
     return v_sq, lam, I
+
+
+def solve_on_grid(
+    spectrum,
+    f,
+    tf_hz,
+    *,
+    P0=1.0,
+    input_noise=None,
+    output_noise=None,
+    sigma_in=0.0,
+    sigma_out=1.0,
+    band=None,
+):
+    """Convenience wrapper: spectrum object -> Result.
+
+    ``input_noise`` and ``output_noise`` may be Noise objects, scalars, arrays, or
+    None.  If None, ``sigma_in``/``sigma_out`` are interpreted as white-noise
+    standard deviations.
+    """
+    f = np.asarray(f, dtype=float)
+    tf_hz = np.asarray(tf_hz, dtype=float)
+    C = spectrum.C(f, tf_hz)
+    S = evaluate_noise(input_noise, f, tf_hz, default_sigma=sigma_in)
+    N = evaluate_noise(output_noise, f, tf_hz, default_sigma=sigma_out)
+    weights = radial_weights(f, tf_hz)
+    if band is None:
+        band_mask = np.ones_like(C, dtype=bool)
+    else:
+        f_max, tf_min_hz, tf_max_hz = band
+        band_mask = band_mask_radial(f, tf_hz, f_max, tf_min_hz, tf_max_hz)
+    weights = weights * band_mask
+    v_sq, lam, I = solve_efficient_coding(C, S, N, weights, P0, band_mask=band_mask)
+    return Result(spectrum, f, tf_hz, C, S, N, v_sq, lam, I, float(P0))

@@ -1,393 +1,58 @@
-# Efficient coding for moving sensors
+# Bare-bones moving-retina efficient coding
 
-This repository contains a reproducible Python implementation of moving-sensor
-efficient-coding analyses. It builds retinal input spectra from image statistics
-and eye-movement models, solves the constrained optimal-filter problem, and
-generates the figure and diagnostic artifacts in `outputs/`.
+This repo is intentionally small.  It keeps only the pieces needed to understand
+and manipulate the current model:
 
-The main code path is:
+1. signal spectra: drift, saccade, linear motion, separable movie;
+2. noise spectra: white, 1/f, cone-like approximation;
+3. the closed-form optimal-filter solver under a response-power budget;
+4. plotting and minimum-phase/zero-phase kernel reconstruction helpers.
 
-1. Define an input spectrum `C_theta(k, omega)` with a `Spectrum.C(k, omega)`
-   object from `src/spectra.py`.
-2. Solve the Linsker/Jun efficient-coding problem with `src/solver.py`, usually
-   through the shared pipeline in `src/pipeline.py`.
-3. Optionally reconstruct spatial and temporal kernels with `src/kernels.py`.
-4. Plot figures, run audits, or fit reusable cell-class filters with the
-   scripts in `figures/` and `scripts/`.
+The human-facing source of truth is:
 
-## What It Computes
+```bash
+scripts/interactive_moving_retina.py
+```
 
-For a natural-image spectrum
+Run it cell-by-cell in VS Code, Spyder, Jupyter, or any editor that understands
+`#%%` cell markers.
+
+## Units
+
+Public units are fixed everywhere:
 
 ```text
-C_I(k) = A / (k^2 + k0^2)^(beta/2)
+spatial frequency f : cycles / degree
+frequency ν         : Hz = cycles / second
 ```
 
-and a movement-generated temporal redistribution, the code solves
+The only place angular factors appear is inside formulas that need phase:
 
 ```text
-maximize    integral_B 0.5 log(1 + |v|^2 C_theta / sigma_out^2) dmu
-subject to  integral_B |v|^2 (C_theta + sigma_in^2) dmu <= P0
-            |v|^2 >= 0
+spatial phase = 2π f x
+temporal angular frequency = 2πν
 ```
 
-The solver uses the closed-form KKT solution with bisection on the dual
-variable lambda. The integration band is controlled by `src/params.py`:
+## Main files
 
 ```text
-K_MAX = 6.0 cycles/deg
-OMEGA_MIN = 0.5 rad/s
-OMEGA_MAX = 400.0 rad/s
+src/params.py      small Band helper and grid construction
+src/spectra.py     DriftSpectrum, SaccadeSpectrum, LinearMotionSpectrum, SeparableMovieSpectrum
+src/noise.py       WhiteNoise, TemporalPowerLawNoise, ConeLikeNoise
+src/solver.py      analytic water-filling / Linsker-Jun solver
+src/kernels.py     zero-phase spatial and minimum-phase temporal reconstruction
+src/plotting.py    plotting and integration weights
 ```
 
-The solver grids currently sample spatial frequencies from `0.05` to `5.0`
-cycles/deg. The `hi_res` grid uses `220 x 2048` samples; the `fast` grid uses
-`120 x 1024` samples.
+There are no hyperparameter sweeps, no cell-class optimizer, no spectrum library
+indirection, and no mosaic model in this stripped-down pass.
 
-## Repository Layout
-
-```text
-src/
-  spectra.py                  Spectrum API plus static image, Brownian drift,
-                              saccade, Dong-Atick linear motion, and
-                              separable stationary controls
-  power_spectrum_library.py   Named SpectrumSpec collections shared by figures,
-                              scripts, and cell-class condition builders
-  solver.py                   Closed-form optimal-filter solver and information
-                              objective
-  pipeline.py                 Spectrum -> Result orchestration, grid selection,
-                              kernel extraction, and slice helpers
-  kernels.py                  Minimum-phase temporal reconstruction and radial
-                              spatial-kernel reconstruction
-  cell_class_learning.py      Reference information-aware reusable class-filter
-                              model
-  cell_class_learning_fast.py Faster Torch implementation used by production
-                              cell-class scripts
-  cell_class_figures.py       Plotting and diagnostics for learned cell classes
-  spectrum_diagnostics.py     Separability and temporal-centroid diagnostics
-  plotting.py                 Matplotlib style, radial weights, band masks, and
-                              contour helpers
-  params.py                   Shared band and grid parameters
-
-figures/                      Figure-generating entry points
-scripts/                      Audits, cell-class runs, and story figures
-tests/                        Focused pytest suite
-outputs/                      Generated PNG/PDF/NPZ/JSON artifacts
-run_all.py                    Tests plus the standard figure pipeline
-HANDOFF.md                    Historical notes; useful context, not source code
-```
-
-## Setup
-
-Use Python 3.9+ from the repository root. There is no package metadata file, so
-install the scientific stack directly:
+## Run
 
 ```bash
-python -m pip install numpy scipy matplotlib pytest
+python -m pytest -q
+MPLBACKEND=Agg python scripts/interactive_moving_retina.py
 ```
 
-Cell-class learning and the related tests/scripts also need Torch:
-
-```bash
-python -m pip install torch
-```
-
-The scripts assume they are run from the repository root because they add `.`
-to `sys.path`.
-
-## Quick Start
-
-Run the test suite:
-
-```bash
-python -m pytest tests/ -v
-```
-
-Generate the standard figure set:
-
-```bash
-python run_all.py --skip-tests
-```
-
-Run tests and generate the standard figures:
-
-```bash
-python run_all.py
-```
-
-Run the full production path, including the fast cell-class fit and the
-cell-class story figures:
-
-```bash
-python run_all.py --with-cell-learning --with-cell-story
-```
-
-Useful `run_all.py` flags:
-
-```text
---skip-tests
---skip-figures
---with-cell-learning
---with-cell-story
---cell-outdir outputs/cell_classes
---cell-story-outdir outputs/cell_classes_story
---cell-kmax 4
---cell-steps 1600
---cell-restarts 2
---cell-device auto
---cell-dtype float32
-```
-
-## Standard Figure Outputs
-
-`python run_all.py --skip-tests` runs these figure scripts:
-
-```text
-figures/fig1_power_spectra.py
-  outputs/fig1a_main.png
-  outputs/fig1c_library.png
-
-figures/fig2_optimal_filter.py
-  outputs/fig2_optimal_filter.png
-
-figures/fig3_kernels.py
-  outputs/fig3_kernels.png
-
-figures/fig4_information_vs_D.py
-  outputs/fig4_information_vs_D.png
-
-figures/fig5_kernel_slices.py
-  outputs/fig5_kernel_slices.png
-
-figures/fig6_saccade_kernels.py
-  outputs/fig6_saccade_kernels.png
-
-figures/fig6b_saccade_diagnostics.py
-  outputs/fig6b_saccade_diagnostics.png
-
-figures/fig6c_saccade_vs_drift_kernels.py
-  outputs/fig6c_saccade_vs_drift_kernels.png
-
-figures/fig8_mostofi_saccade_approximation.py
-  outputs/fig8_mostofi_saccade_approximation.png
-
-figures/figQ1_spectrum_library.py
-  outputs/figQ1_spectrum_library.png
-
-figures/figQ2_information_sweeps.py
-  outputs/figQ2_information_sweeps.png
-
-figures/figQ3_magno_parvo.py
-  outputs/figQ3_magno_parvo.png
-```
-
-The standard figures use the same core spectrum objects as the interactive
-scripts: `DriftSpectrum`, `SaccadeSpectrum`, `SeparableMovieSpectrum`, and
-`LinearMotionSpectrum`. Figure panels are constructed directly on the grid used
-by that script.
-
-## Common Workflows
-
-Run the aliasing sanity check:
-
-```bash
-python scripts/check_aliasing_negligible.py
-```
-
-Audit movement spectra and separability assumptions:
-
-```bash
-python scripts/run_spectrum_audit.py --outdir outputs/spectrum_audit
-```
-
-Create the stationary-vs-active story figures:
-
-```bash
-python scripts/make_stationary_vs_active_story.py \
-  --grid fast \
-  --no-kernels \
-  --outdir outputs/stationary_vs_active_story
-```
-
-Run the default cell-class fit on the canonical saccade/drift pair:
-
-```bash
-python scripts/run_cell_class_learning.py \
-  --grid fast \
-  --kmax 4 \
-  --steps 1600 \
-  --restarts 2 \
-  --device auto \
-  --dtype float32 \
-  --sigma-in 0.3 \
-  --sigma-out 1.0 \
-  --P0 50 \
-  --outdir outputs/cell_classes
-```
-
-Turn a saved cell-class fit into publication-style story figures:
-
-```bash
-python scripts/make_cell_class_story_figures.py \
-  --indir outputs/cell_classes \
-  --outdir outputs/cell_classes_story \
-  --K 2
-```
-
-Run the input-noise sweep for reusable cell classes:
-
-```bash
-python scripts/run_cell_class_noise_sweep.py \
-  --grid fast \
-  --sigma-in-values 0.1,0.3,0.6,1.0 \
-  --kmax 3 \
-  --steps 1200 \
-  --restarts 2 \
-  --device auto \
-  --dtype float32 \
-  --outdir outputs/cell_classes_noise_sweep
-```
-
-Run the larger movement-sweep cell-class experiment:
-
-```bash
-python scripts/run_cell_class_learning.py \
-  --condition-set movement_sweep \
-  --grid fast \
-  --kmax 4 \
-  --steps 1600 \
-  --restarts 2 \
-  --torch-threads 1 \
-  --outdir outputs/cell_classes_movement_sweep
-```
-
-Compute information-vs-power curves for oracle and reusable class models:
-
-```bash
-python scripts/run_information_power_curve.py \
-  --condition-set movement_sweep \
-  --grid fast \
-  --k-values 1,2,3 \
-  --fit-mode fixed-H \
-  --alpha-mode bounded_log_gain \
-  --gain-delta-max 0.5 \
-  --P-ref 50 \
-  --steps-H 1500 \
-  --steps-alpha 400 \
-  --restarts 2 \
-  --device auto \
-  --dtype float32 \
-  --torch-threads 1 \
-  --outdir outputs/information_power_curve
-```
-
-For slower optimizer comparisons in the cell-class scripts, pass
-`--optimizer reference`.
-
-## Using the Pipeline in Code
-
-```python
-from src.pipeline import SolveConfig, run_many, extract_kernels
-from src.power_spectrum_library import drift_spectrum_specs
-
-specs = drift_spectrum_specs([0.05, 0.5, 5.0, 50.0])
-config = SolveConfig(sigma_in=0.3, sigma_out=1.0, P0=50.0, grid="hi_res")
-
-results = run_many(specs, config, kernels=True)
-for spec, result in zip(specs, results):
-    print(spec.key, result.I, result.k_peak)
-```
-
-For a single custom spectrum:
-
-```python
-from src.pipeline import run, extract_kernels
-from src.spectra import SaccadeSpectrum
-
-result = run(SaccadeSpectrum(A=2.5), sigma_in=0.3, sigma_out=1.0, P0=50.0)
-extract_kernels(result)
-```
-
-## Adding a Movement Spectrum
-
-New analyses should define spectra once and reuse the shared pipeline.
-
-1. Add or reuse a `Spectrum` class in `src/spectra.py` with a `C(k, omega)`
-   method.
-2. Add a small factory in `src/power_spectrum_library.py` that returns
-   `SpectrumSpec` objects with readable keys, labels, parameters, and
-   references.
-3. Register the factory in `SPECTRUM_SETS` if scripts should request it by
-   name.
-4. Run the specs with `src.pipeline.run_many(...)`, or convert them to
-   cell-class conditions with `conditions_from_spectrum_specs(...)`.
-
-Avoid rebuilding grids, masks, or solver calls inside figure scripts when a
-shared entry point already exists.
-
-## Cell-Class Model
-
-The cell-class workflow learns a small number of reusable nonnegative filter
-power spectra `H_c(k, omega)`. For each movement condition `q`, the model forms
-a condition-dependent mixture
-
-```text
-G_raw[q] = sum_c alpha[q, c] H_c
-```
-
-and rescales it so every condition spends the same response-power budget `P0`.
-The objective is the same Gaussian mutual information used by the oracle
-efficient-coding solver, not a squared-error fit to the oracle filters.
-
-The default condition stack is the direct saccade/drift pair:
-
-```text
-saccade_A_4.4  = I(k) Q_saccade(A=4.4 deg)
-drift_D_0.0375 = I(k) Q_drift(D=0.0375 deg^2/s)
-```
-
-`--condition-set movement_sweep` instead fits five saccade amplitudes and five
-Brownian-drift diffusion values.
-
-## Tests
-
-The current test suite covers the core solver, spectra, plotting registry, and
-cell-class condition builders:
-
-```text
-tests/test_cell_class_conditions.py
-tests/test_constrained_gain_learning.py
-tests/test_pipeline.py
-tests/test_power_spectrum_library.py
-tests/test_separable_stationary_control.py
-tests/test_spectrum_classes.py
-```
-
-`tests/test_constrained_gain_learning.py` uses `pytest.importorskip("torch")`,
-so the Torch-specific tests are skipped when Torch is not installed.
-
-## Numerical Conventions
-
-- Spatial frequency `k` is radial frequency in cycles/degree.
-- Temporal frequency `omega` is angular frequency in rad/s; Hz is
-  `omega / (2*pi)`.
-- Brownian drift `D` is in deg^2/s and enters as `D * (2*pi*k)^2`.
-- Saccade amplitude `A` is in degrees and enters as `2*pi*k*A`.
-- Linear velocity scale `s` is in deg/s and enters as `2*pi*k*s`.
-- Radial integration uses the 2D spatial measure collapsed into `k dk d omega`.
-- The temporal grid is centered and uniform; kernel reconstruction uses
-  `ifftshift` before FFT operations where needed.
-- The temporal kernel phase is recovered by cepstral minimum-phase
-  reconstruction after softening hard band edges with `soft_band_taper`.
-
-## Aliasing Note
-
-The main solver uses the direct, unaliased spectrum, following the
-dominant-copy assumption in the appendix. `scripts/check_aliasing_negligible.py`
-quantifies the size of folded copies for the shared band and parameter ranges.
-
-The short version: the assumption is more reliable at higher drift and with
-oversampling. At very low drift under critical sampling, folded high-spatial
-frequency power can be comparable to the direct in-band contribution. Modeling
-that case properly requires choosing an explicit mosaic structure, which this
-repository does not currently do.
+The script is written for interactive use, so running it as a script mostly checks
+that the code path is clean.

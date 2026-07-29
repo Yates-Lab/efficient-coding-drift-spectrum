@@ -150,9 +150,9 @@ Mathematical details of Brownian motion (i.e., the process by which brownian mot
 Let $u(t)$ evolve stochastically from initial position $x_0$ via Brownian motion $W_t$ with diffusion constant $D$:
 \afbcomment{This needs to be written as a SDE.}
 \begin{align}
-    u(t) = x_0 + \sqrt{2D}\,W_t.
+    du(t) = \sqrt{2D} dW(t),\quad u(0) = x_0.
 \end{align}
-which has solution $\rho(\xi,\tau)$, where $x_0$ is starting point $x_0$ and $t$ is time
+The probability distribution of the SDE solution is $\rho(\xi,\tau)$, where $x_0$ is starting point $\xi$ and $\tau$ is space and time, respectively
 \begin{align}
     \rho(\xi,\tau) = \frac{1}{\sqrt{4\pi D|\tau|}} \exp\!\left( -\frac{\xi^2}{4D|\tau|} \right).
 \end{align}

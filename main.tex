@@ -136,16 +136,18 @@ Points to make
     \centering
     \includegraphics[width=14cm]{results/emp_vs_analytic.pdf}
     \label{fig:stats}
-    \caption{Spatial and temporal spectra for different betas.}
+    \caption{Drifting natural images and analytic model are in good agreement.}
 \end{figure}
 
 \begin{figure}[t]
     \centering
     \includegraphics[width=15.14cm]{results/spatial_temporal_spectra_for_different_betas.pdf}
     \label{fig:stats}
-    \caption{Drifting natural images and analytic model are in good agreement.}
+    \caption{spatio temporal power spectra for different betas. Diffusion values are in arcmin$^2$/s.}
 \end{figure}
-Mathematical details of Brownian motion (i.e., the process by which brownian motion is generated and the resulting density function $\rho(\xi,\tau)$. 
+Mathematical details of Brownian motion (i.e., the process by which brownian motion is generated and the resulting density function $\rho(\xi,\tau)$). 
+
+
 \afbcomment{motivate  drift. eye is never still. well approximated by drift. Drift is a feature not a bug. Exploited by imaging technology: google(?) paper that uses motion from hand tremor to do subpixel resolution. [likely move this to introduction]}
 
 Let $u(t)$ evolve stochastically from initial position $x_0$ via Brownian motion $W_t$ with diffusion constant $D$:
@@ -156,7 +158,7 @@ The probability distribution of the SDE solution is $\rho(\xi,\tau)$, where $\xi
 \begin{align}
     \rho(\xi,\tau) = \frac{1}{\sqrt{4\pi D|\tau|}} \exp\!\left( -\frac{\xi^2}{4D|\tau|} \right).
 \end{align}
-The space-time fourier transform of $\rho(\xi,\tau)$ has a simple form (see appendix~\ref{sec:app_drfit} for derivation details). 
+The space-time fourier transform of $\rho(\xi,\tau)$ has a simple form (see appendix~\ref{sec:app_drift} for derivation details). 
 A well known property of static natual images is that the power spectrum is power-law in spatial frequency. This means that $C_s(k) \propto k^{-\beta}$ for some $\beta>0$. 
 The resulting space-time power spectrum is then given by the power spectrum of the static signal $C_s(k)$ multiplied by a simple term derived from the spate-time Fourier transform of $\rho$
 \begin{align}
@@ -166,7 +168,7 @@ The resulting space-time power spectrum is then given by the power spectrum of t
 \end{align}
 for $D>0$. The power spectrum for brownian motion drifted images takes a a simple form. It is well known that the power spectrum of natual iamges have is power-law in spatial frequency with an exponent of about 2. Interestingly, when $\beta=2$, the spatial frequency term in the numerator is canceled. This has a whitening effect on the power spectrum (figure 1). This is consistent with empirical observations of drifting natural images (figure 1). This analytic model is a very good fit to the emperical data (Figure 1). This qualitative effect has been described previously. Here, we've developed an analytic model that capture this effect. The whitening effect is seen more clearly by looking at cross sections at various spatial frequencies and temporal frequencies (figure 1). The power spectrum is flat up to a cut-off frequency, and then falls as a function of $f^{-4}$ or $\omega^{-2}$. This cut off frequency is at $\omega = D k^2$. 
 
-The fall of the power spectrum is quite different from previous reports of the statistics of natural movies (Dong and Atick, Jun et al., ...). Dong and Atick. World-fixed camera footage of natural scenes are reported to have a space-time seperable power spectrum that falls as $C(k,\omega)\propto k^{-2}\omega^{-1.3}$ (Jun et al.). Dong and Atick analyzed Handycam footage and scenes from indiana jones and found a non-seperable power spectrum that falls that has an exponent between $-1,-2$ for both spacial and temporal frequencies. 
+The fall of the power spectrum is quite different from previous reports of the statistics of natural movies (Dong and Atick, Jun et al., ...). Dong and Atick analyzed Handycam footage and scenes from indiana jones and found a non-seperable power spectrum that falls that has an exponent between $-1,-2$ for both spacial and temporal frequencies.  World-fixed camera footage of natural scenes are reported to have a space-time seperable power spectrum that falls as $C(k,\omega)\propto k^{-2}\omega^{-1.3}$ (Jun et al.). Ocko also considers a space-time seperable power spectrum. 
 
 These charactizations of space-time statistics of natural image indicate that they contain correlations in both space and time.
 Decorrelation or whitening of correlated sensory inputs is a classic theory of retinal processing (atick and redlich, olshausen and field, Doi, etc.) that predicts circularly symmetric center-surround receptive fields as whitening filters. 
@@ -281,20 +283,19 @@ Note that phases $\phi (k,\omega)$ of filters $w(k,\omega) = \lvert w(k,\omega)\
 \afbcomment{
 Points to make 
 \begin{itemize}
-    \item (figure 2) Optimal filters allocate more power to high spatial frequencies. Still get center-surround receptive fields.
-    \item (figure 2) For simple iid noise, drift increases information transfer. The drift reformats spatial information into temporal fluctuations. power constraint and noise makes allocating power to temporal frequencies useful. Result suggests that motion is not a bug, but feature that can serve as a coding strategy for transmitting information about the visual scene. Something thats been said before.
-    \afbquestion{Is there empirical evidence that aligns with this prediction -- something to ask Jorge about?}
-    \item (figure 2) Retina experiences greater variation in input noise (under vast changes in illumination) than output noise. Model predicts more output noise means less drift. 
-    % \item More input noise predicts more drift. \afbcomment{check literature if input noise (ambiguity) in input results in more drift -- something to ask Jorge about?}
+    \item (figure 3) Optimal filters allocate more power to high spatial frequencies. Still get center-surround receptive fields.
+    \item (figure 3) For simple iid noise, drift increases information transfer. The drift reformats spatial information into temporal fluctuations. power constraint and noise makes allocating power to temporal frequencies useful. Result suggests that motion is not a bug, but feature that can serve as a coding strategy for transmitting information about the visual scene. Something thats been said before.
     \item (Figure 3) Even if the input power spectrum is space time separable (e.g., suggested by ...), the temporal derivative constraint causes optimal filters to attenuate high temporal frequencies resulting in filters that are not space-time separable. 
     \item (Figure 3) Despite so called "whitening effect" of eye movements, space time filters are still bandpass in space. Also low pass in time.
+    \afbquestion{Is there empirical evidence that aligns with this prediction -- something to ask Jorge about?}
+    \item (figure 4) Retina experiences greater variation in input noise (under vast changes in illumination) than output noise. Model predicts more output noise means less drift. 
+    % \item More input noise predicts more drift. \afbcomment{check literature if input noise (ambiguity) in input results in more drift -- something to ask Jorge about?}
     % \item \afbquestion{If we assume perfect spatial whitening of input (i.e., images are actually $1/f$, are the optimal filters still center-surrounds? If so, why? Shouldnt be a property of input noise (more input noise makes less surround and more diffuse/low pass). Maybe output noise?? Not sure how to think about output noise in the Fourier space but equations are simple and should provide insights. The spatial whitening of eye movements breaks the center-surround decorrelation story. Could we reconcile this? Does Rucci address this? If so, what does he say.}
-    \item (Figure 4) Changing input noise while keeping drift fixed changes the optimal filter. Makes it more spatially low pass similar to finding of atick and redlich (filters lose thier surrounds). However, if we find the optimal drift for a given input noise, a different behavior is observed. Over various input noises the optimal filters maintain a very similar qualitative shape (band pass in space (have center-surrounds) and low pass in time) but exhibit a diliation in space, and a contraction in time. Different prediction from atick and redlich.
-    \item Figure 4 -- why is diliation so profound? Optimal drift varies greatly (from 0.2 to 63). Unlikely that retina utilizes such a wide range of drift. Possibly a limitation of the simple linear model. At very low noise levels, other computational strategies not incorporated into the model, such as temporal averaging and nonlinear processing (field and rieke, 2002) could be more effective. 
-    \item (https://www.biorxiv.org/content/10.1101/2022.09.15.508164v1.full.pdf) finds that temporal RFs get faster with more light (less noise). Surrounds are maintained across light levels. centers get a bit smaller with more light. our results contradict the temporal RFs getting faster with more light. our results are consistent with surrounds that persist. our results contradict centers remaining same size across noise levels. That said, this is all rat. 
+    \item Changing input noise while keeping drift fixed changes the optimal filter. Makes it more spatially low pass similar to finding of atick and redlich (filters lose thier surrounds). However, if we find the optimal drift for a given input noise, a different behavior is observed. Over various input noises the optimal filters maintain a very similar qualitative shape (band pass in space (have center-surrounds) and low pass in time) but exhibit a diliation in space, and a contraction in time. Different prediction from atick and redlich.
+    % \item Figure 4 -- why is diliation so profound? Optimal drift varies greatly (from 0.2 to 63). Unlikely that retina utilizes such a wide range of drift. Possibly a limitation of the simple linear model. At very low noise levels, other computational strategies not incorporated into the model, such as temporal averaging and nonlinear processing (field and rieke, 2002) could be more effective. 
+    % \item (https://www.biorxiv.org/content/10.1101/2022.09.15.508164v1.full.pdf) finds that temporal RFs get faster with more light (less noise). Surrounds are maintained across light levels. centers get a bit smaller with more light. our results contradict the temporal RFs getting faster with more light. our results are consistent with surrounds that persist. our results contradict centers remaining same size across noise levels. That said, this is all rat. 
     \item (Rucci \& Casile 2005) used model of cat X cells. rank 2 (center and surround) separable receptive fields that are biphasic in time (surround lagged a bit). fixational jitter strongly altered neuronal response. It decorrelated response.  They dont directly study the statistical structure of the inputs. 
-    \item https://www.jneurosci.org/content/jneuro/34/38/12701.full.pdfm -- aytekin victor rucci 2014 -- The results of our study show that, during normal fixation, the spatiotemporal signals impinging on retinal receptors are already whitened within the range of temporal frequencies at which ganglion cells respond best. This whitening occurs before any neural processing takes place. Thus, neural decorrelation, is not a viable theory to explain the filtering characteristics of receptive fields. contrast sensitivity functions of retinal ganglion cells further enhance high spatial frequencies above and beyond what is required for redundancy removal, leading to an enhancement of the luminance discontinuities in the scene. Critically, this edge enhancement happens in the temporal domain: it occurs in the synchronous firing of retinal ganglion cells, yielding a temporal code that takes advantage of the notion that synchronous responses tend to propagate more reliably than asynchronous ones.
-analytic form. 
+    \item https://www.jneurosci.org/content/jneuro/34/38/12701.full.pdfm -- aytekin victor rucci 2014 -- The results of our study show that, during normal fixation, the spatiotemporal signals impinging on retinal receptors are already whitened within the range of temporal frequencies at which ganglion cells respond best. Whats our response? This whitening occurs before any neural processing takes place. "Thus, neural decorrelation, is not a viable theory to explain the filtering characteristics of receptive fields. contrast sensitivity functions of retinal ganglion cells further enhance high spatial frequencies above and beyond what is required for redundancy removal, leading to an enhancement of the luminance discontinuities in the scene. Critically, this edge enhancement happens in the temporal domain: it occurs in the synchronous firing of retinal ganglion cells, yielding a temporal code that takes advantage of the notion that synchronous responses tend to propagate more reliably than asynchronous ones."
 \end{itemize}
 }
 
@@ -305,10 +306,34 @@ analytic form.
 % \end{itemize}
 % }
 
+\section{Optimal weights for linear-nonlinear model}
+
+Linear model is limited as it only considers pair-wise correlations as relies on power spectrum which is equal to fourier transform of autocorrelation function. Its well known that natural images contain higher-order correlations. A natural extension of the linear model (descirbed by Atick and Redlich, Linsker) is the linear-nonlinear model of karklin and simoncelli, further extended to space-time by Jun et al. Linsker showed that introducting nonlinearities into the model allows it to learn higher-order correlations. While K\&S  motivation to introduce nonlinearities is to model nonnegative code in the optic nerve (biological mimicry), nonlinearities also have the pricipled motivation of allowing the model to learn higher-order correlations. 
+
+\afbcomment{Describe the model}
+
+Results:
+\begin{itemize}
+    \item Weights become spatially localized.
+    \item They bifurcate into three classes. Each class bifucates into on and off types. each subtype 1 and 2 tiles space. 3 hasn't gotten there yet. 
+    \item type 1 and 2 spatial filters are bandpass, consistent with retina and linear model.
+\end{itemize}
+
+
+\begin{figure}[tbp]
+    \centering
+    \makebox[\textwidth][c]{%
+        \includegraphics[width=17.81cm]{results/combined_fig.pdf}%
+    }
+    \caption{Optimal weights for linear nonlinear model.}
+    \label{fig:mi}
+\end{figure}
 
 
 \section*{Discussion}
 \begin{itemize}
+    \item Main contributions: Describing pair-wise statistical structure of stochastically moving images. Focus in on drift, which produces a whitening effect. Despite this apparent structure, we show that circularly symmetric center-surround receptive fields of RGCs are predicted (optimal) under efficient coding objective. Gained understanding in linear model; nonlinear model is consistent. The reconciliation relies on the specific structure of the power spectrum. spatial Power drops as $k^{-4}$ after a cut-off frequency. Still signal left to amplify, thus optimal filters become band-pass in space. 
+    \item Generate new prediction: higher noise (low contrast) eyes may drift more? Drifting allows for reshaping statistics before any neural processing occurs. 
     \item Relevant work -- rucci. 
     \item Earlier reports of spatio temporal statistics of natural images -- Dong and Atick, Eckea M P and Buchsbaum G 1993, 
     \item Efficient coding literature -- Jun, Ocko. 
@@ -324,7 +349,7 @@ analytic form.
 %
 \section{Appendix}
 
-\subsection{Derivation of Autocorrelation} \label{sec:app_autocorrelation}
+\subsection{Autocorrelation of stochastically moving images} \label{sec:app_autocorrelation}
 
 Follow logic of Dong and Attick 1995 \citep{dong1995}. That is, get an equation that describes the spatio-temporal correlations $C_z(\xi,\tau)$ as a function of space $\xi$ and time $\tau$ lags. Then we can take the fourier transform in space and time. 
 Define spatial-temporal autocorrelation function
@@ -353,7 +378,7 @@ Assuming translation invariance, we can take expectation over brownian paths whi
 \end{align}
 
 
-\subsection{Derivation of ST PSD of Drifting Sensors} \label{sec:app_drift}
+\subsection{Spatio-temporal power spectrum of images undergoing Brownian translations} \label{sec:app_drift}
 
 \begin{align}
     \rho(\xi,\tau) = \frac{1}{\sqrt{4\pi D|\tau|}} \exp\!\left( -\frac{\xi^2}{4D|\tau|} \right).
@@ -398,7 +423,7 @@ up to a constant. Note that in the limit as $D$ goes to zero, all power lies at 
 \end{align}
 
 
-\subsection{Derivation of Optimal Linear Filters} \label{sec:app_optimal_filters}
+\subsection{Optimal Linear Filters} \label{sec:app_optimal_filters}
 
 The information optimization objective subject to the power constraint can be rewritten using a Lagrange multiplier $\lambda$. The Lagrangian density for each Fourier mode is
 \begin{align}

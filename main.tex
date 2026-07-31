@@ -1,5 +1,6 @@
 \documentclass[12pt]{article}
 \usepackage{amsmath}
+\usepackage{amssymb}
 \usepackage{times}
 \usepackage{graphicx}
 \usepackage{color}
@@ -113,11 +114,11 @@ Under the assumptions of $u(t)$ above, the probability density of displacements 
 The space-time autocorrelation $C_z(\xi,\tau)$ can be written as a simple spatial convolution of the spacial autocorrelation function $C_s(\xi)$ and the movement density function $\rho(\xi,\tau)$,
 \begin{align}
     C_z(\xi,\tau) &= \mathbb{E}_{x,t}\big[ z(x, t) \, z(x+\xi,t+\tau)\big] \\
-        &= \big(C_s * \rho(\cdot,\tau)\big)(\xi)
+        &= \big(\rho(\cdot,\tau) * C_s\big)(\xi)
 \end{align}
 See appendix~\ref{sec:app_autocorrelation} for derivation details. Given the spatial convolution above and the image autocovariance function's independence of time, the space-time power spectrum $C_z(k,\omega)$ of $z$ reduces to simple multiplication in Fourier domain
 \begin{align}
-    C_z(k,\omega) = C_s(k)\, \rho(k,\omega).
+    C_z(k,\omega) =  \rho(k,\omega)\, C_s(k).
 \end{align}
 
 
@@ -140,50 +141,43 @@ Points to make
 
 \begin{figure}[t]
     \centering
-    \includegraphics[width=15.41cm]{results/spatial_temporal_spectra_for_different_betas.pdf}
+    \includegraphics[width=15.14cm]{results/spatial_temporal_spectra_for_different_betas.pdf}
     \label{fig:stats}
-    \caption{Spatial and temporal spectra for different betas.}
+    \caption{Drifting natural images and analytic model are in good agreement.}
 \end{figure}
 Mathematical details of Brownian motion (i.e., the process by which brownian motion is generated and the resulting density function $\rho(\xi,\tau)$. 
 \afbcomment{motivate  drift. eye is never still. well approximated by drift. Drift is a feature not a bug. Exploited by imaging technology: google(?) paper that uses motion from hand tremor to do subpixel resolution. [likely move this to introduction]}
 
 Let $u(t)$ evolve stochastically from initial position $x_0$ via Brownian motion $W_t$ with diffusion constant $D$:
-\afbcomment{This needs to be written as a SDE.}
 \begin{align}
     du(t) = \sqrt{2D} dW(t),\quad u(0) = x_0.
 \end{align}
-The probability distribution of the SDE solution is $\rho(\xi,\tau)$, where $x_0$ is starting point $\xi$ and $\tau$ is space and time, respectively
+The probability distribution of the SDE solution is $\rho(\xi,\tau)$, where $\xi$ and $\tau$ is space and time, respectively
 \begin{align}
     \rho(\xi,\tau) = \frac{1}{\sqrt{4\pi D|\tau|}} \exp\!\left( -\frac{\xi^2}{4D|\tau|} \right).
 \end{align}
+The space-time fourier transform of $\rho(\xi,\tau)$ has a simple form (see appendix~\ref{sec:app_drfit} for derivation details). 
+A well known property of static natual images is that the power spectrum is power-law in spatial frequency. This means that $C_s(k) \propto k^{-\beta}$ for some $\beta>0$. 
 The resulting space-time power spectrum is then given by the power spectrum of the static signal $C_s(k)$ multiplied by a simple term derived from the spate-time Fourier transform of $\rho$
 \begin{align}
-    C_z(k,\omega) = C_s(k)\,\frac{2Dk^2}{(Dk^2)^2+\omega^2}
+    C_z(k,\omega) & = \rho(k,\omega)\, C_s(k) \\
+    % &= \frac{2Dk^2}{(Dk^2)^2+\omega^2}\,C_s(k) \\
+    & = \frac{2Dk^{2-\beta}}{(Dk^2)^2+\omega^2}
 \end{align}
-for $D>0$. See appendix~\ref{sec:app_drfit} for derivation details. 
+for $D>0$. The power spectrum for brownian motion drifted images takes a a simple form. It is well known that the power spectrum of natual iamges have is power-law in spatial frequency with an exponent of about 2. Interestingly, when $\beta=2$, the spatial frequency term in the numerator is canceled. This has a whitening effect on the power spectrum (figure 1). This is consistent with empirical observations of drifting natural images (figure 1). This analytic model is a very good fit to the emperical data (Figure 1). This qualitative effect has been described previously. Here, we've developed an analytic model that capture this effect. The whitening effect is seen more clearly by looking at cross sections at various spatial frequencies and temporal frequencies (figure 1). The power spectrum is flat up to a cut-off frequency, and then falls as a function of $f^{-4}$ or $\omega^{-2}$. This cut off frequency is at $\omega = D k^2$. 
 
+The fall of the power spectrum is quite different from previous reports of the statistics of natural movies (Dong and Atick, Jun et al., ...). Dong and Atick. World-fixed camera footage of natural scenes are reported to have a space-time seperable power spectrum that falls as $C(k,\omega)\propto k^{-2}\omega^{-1.3}$ (Jun et al.). Dong and Atick analyzed Handycam footage and scenes from indiana jones and found a non-seperable power spectrum that falls that has an exponent between $-1,-2$ for both spacial and temporal frequencies. 
 
+These charactizations of space-time statistics of natural image indicate that they contain correlations in both space and time.
+Decorrelation or whitening of correlated sensory inputs is a classic theory of retinal processing (atick and redlich, olshausen and field, Doi, etc.) that predicts circularly symmetric center-surround receptive fields as whitening filters. 
 
-
-\afbcomment{
-Points to make 
-\begin{itemize}
-    \item Drift $C(k,\omega)$ takes a simple form
-    \item the fall-offs after the ridge for spatial and temporal frequencys are -4 and -2 respectively (if beta=2)
-    \item The ridge of the spectrum is at $\omega = D k^2$. This is the line at that passes throught kinks in power.
-    \item spatial whitening effect of natural images if power spectrum is exactly $1/f^2$. If steeper, then not perfectly whitened. I think people generally find it to be a bit steeper, but marginal. Details aren't that important, just tell people the conditions under which perfect spatial whitening is achieved.   
-\end{itemize}
-}
-
+Drifting eye movements has an apparent whitening effect on natural images (figure 1) as the power spectrum is flat up to a cut-off frequency. This raises a conundrum. If the input spectrum to the retina has already been whitened by eyemovements, what are center surround receptive fields doing in the retina?
 
 \section{Optimal Linear Filters}
 
 \afbcomment{Not convinced that the spatiotemporal descriptions are necessary. Can just start with Fourier domain. Then the power constraint is more intuitive as well...}
 
-This finding is quite different from previously reported statistics of natural images (Dong and Atick, Jun et al., ...) who find power law fall off in spatial frequency. Theory sphering/decorrelation in retina predicts circularly symmetric center-surround receptive fields as whitening filters this power law fall-off. 
-
-Function of retina related to the statistics of input. 
-Seek to study the data's statistics to gain insight into retinal function. 
+Function of retina related to the statistics of input. What predictions does efficient coding make? 
 Use an approach developed by Atick and Redlich, Linsker. Also used by Jun. 
 Linear model with input/output noise. Seeks to maximize mutual infromation between input and output under a power constraint. 
 Heres the model:
@@ -206,16 +200,23 @@ Can be written in Fourier domain as
 \begin{align}
     r(k,\omega) = w(k,\omega) \big(z(k,\omega)+n_{in}(k,\omega) \big)+n_{out}(k,\omega).
 \end{align}
-Here, we assume input and output noise are i.i.d. Gaussian, thus $n_{in}(k,\omega) = \sigma^2_{in}$ and $n_{out}(k,\omega)= \sigma^2_{out}$. Information density per Fourier mode is given by 
+Here, we assume input and output noise are i.i.d. Gaussian, thus flat in the Fourier domain, $n_{in}(k,\omega) = \sigma^2_{in}$ and $n_{out}(k,\omega)= \sigma^2_{out}$. 
+% Information density per Fourier mode is given by 
+% \begin{align}
+%     \mathcal{I}(k,\omega) = \frac{1}{2}\log \left(1+ \frac{v(k,\omega)\, C_z(k,\omega)}{\sigma_{in}^2 v(k,\omega) + \sigma_{out}^2} \right),
+% \end{align}
+% where $v(k,\omega) = \lvert w(k,\omega)\rvert^2$.
+% \afbcomment{i dont think equation above adds much or is necessary. Just need to explain where this log(1+p/n) comes from. Elements of Info Thoery  text might suffice as a citation? Equation is straightforward: num is signal power and denom is noise. Same holds for equation below. }
+The total information transfered by the linear filter $w(k,\omega)$ is
 \begin{align}
-    \mathcal{I}(k,\omega) = \frac{1}{2}\log \left(1+ \frac{v(k,\omega)\, C_z(k,\omega)}{\sigma_{in}^2 v(k,\omega) + \sigma_{out}^2} \right),
+    I(Z;R) = \frac{1}{2} \int\frac{dk\,d\omega}{(2\pi)^2}\, \log \left(1+ \frac{\lvert w(k,\omega)\rvert^2 \, C_z(k,\omega)}{\sigma_{in}^2 \lvert w(k,\omega)\rvert^2  + \sigma_{out}^2} \right).
 \end{align}
-where $v(k,\omega) = \lvert w(k,\omega)\rvert^2$.
-\afbcomment{i dont think equation above adds much or is necessary. Just need to explain where this log(1+p/n) comes from. Elements of Info Thoery  text might suffice as a citation? Equation is straightforward: num is signal power and denom is noise. Same holds for equation below. }
-and the total information is 
+or 
 \begin{align}
-    I(Z;R) = \frac{1}{2} \int_B\frac{dk\,d\omega}{(2\pi)^2}\, \log \left(1+ \frac{v(k,\omega)\, C_z(k,\omega)}{\sigma_{in}^2 v(k,\omega) + \sigma_{out}^2} \right)
+    I(Z;R) &= \frac{1}{2} \int\frac{dk\,d\omega}{(2\pi)^2}\, \log \left(1+ \text{SNR}\right) \\
+    \text{SNR} &= \frac{\lvert w(k,\omega)\rvert^2 \, C_z(k,\omega)}{\sigma_{in}^2 \lvert w(k,\omega)\rvert^2  + \sigma_{out}^2} 
 \end{align}
+% where $v(k,\omega) = \lvert w(k,\omega)\rvert^2$. 
 % The $(2\pi)^2$ comes from the assumed definition of inverse fourier transform. It's not really that important in the end because when you solve for the filter it goes away.
 
 % Assuming the input distribution is Gaussian, mutual information can be written log-dets of covariance matrices
@@ -227,7 +228,7 @@ and the total information is
 % Constraints on the filter are necessary. the first is a constraint on the output power. the second is a temporal derivative on the output. High frequency responses to not come for free in neural systems, they require larger neurons and increased metabolic cost. To model this, we add a penalty to the temporal derivative of the output. Let $y(t)$ denote the output of the filter. In the time domain, we want to penalize $\mathbb{E}[|\dot{y}|^2]$.  In the Fourier domain, temporal differentiation multiples the output power spectrum by $\omega^2$. Thus the optimization problem over the filter which includes the temporal derivative and power constraint on the filter can be written as,
 % \begin{align}
 %     \text{maximize}\quad & I(Z;R) \\
-%     \text{subject to}\quad & \int_B \frac{dk\,d\omega}{(2\pi)^2}\,(1+\eta\omega^2)\,v(k,\omega)\,\big(C_z(k,\omega) + \sigma^2_{in} \big) = 1
+%     \text{subject to}\quad & \int \frac{dk\,d\omega}{(2\pi)^2}\,(1+\eta\omega^2)\,v(k,\omega)\,\big(C_z(k,\omega) + \sigma^2_{in} \big) = 1
 % \end{align}
 % where $\eta\ge0$ is a parameter which specifies the strength of penalty on temporal differentiation. 
 
@@ -242,12 +243,12 @@ where $\eta\ge 0$ controls the strength of the temporal smoothness penalty. This
 \end{align}
 with $v(k,\omega)=|w(k,\omega)|^2$, the constraint becomes
 \begin{align}
-    \int_B \frac{dk\,d\omega}{(2\pi)^2} \left(1+\eta\omega^2\right) C_y(k,\omega)= 1.
+    \int \frac{dk\,d\omega}{(2\pi)^2} \left(1+\eta\omega^2\right) C_y(k,\omega)= 1.
 \end{align}
 Thus the optimization problem is
 \begin{align}
     \text{maximize}\quad & I(Z;R) \\
-    \text{subject to}\quad & \int_B \frac{dk\,d\omega}{(2\pi)^2} \left(1+\eta\omega^2\right) C_y(k,\omega)= 1 .
+    \text{subject to}\quad & \int \frac{dk\,d\omega}{(2\pi)^2} \left(1+\eta\omega^2\right) C_y(k,\omega)= 1 .
 \end{align}
 Conveniently, the power spectrum of the optimal space-time filter $v(k,\omega)$ can be solved for analytically,
 \begin{equation}
@@ -257,7 +258,18 @@ Conveniently, the power spectrum of the optimal space-time filter $v(k,\omega)$ 
 given a Lagrange multiplier $\lambda$ which satisfies the constraint has been found. See appendix~\ref{sec:app_optimal_filters} for derivation details.
 Note that phases $\phi (k,\omega)$ of filters $w(k,\omega) = \lvert w(k,\omega)\rvert\,e^{i\phi(k,\omega)}$ are left unspecified. Assume zero phase for spatial, or the minimum phase difference one for the temporal phases. 
 
-\subsection{Optimal Filters Under Drift}
+% \subsection{Optimal Filters Under Drift}
+
+\begin{figure}[t]
+    \centering
+    \makebox[\textwidth][c]{%
+        \includegraphics[width=17.8cm]{results/optimal_filter.pdf}
+    }
+    \caption{Optimal filter and kernel.}
+    \label{fig:scaling}
+\end{figure}
+
+
 \begin{figure}[t]
     \centering
     \includegraphics[width=14.25cm]{results/optimal_diffusion_constant_vs_input_output_noise.pdf}
@@ -265,14 +277,6 @@ Note that phases $\phi (k,\omega)$ of filters $w(k,\omega) = \lvert w(k,\omega)\
     \caption{Optimal diffusion constant vs. input and output noise.}
 \end{figure}
 
-\begin{figure}[t]
-    \centering
-    \makebox[\textwidth][c]{%
-        \includegraphics[width=14.24cm]{results/optimal_filter.pdf}
-    }
-    \caption{Optimal filter and kernel.}
-    \label{fig:scalign}
-\end{figure}
 
 \afbcomment{
 Points to make 
@@ -349,7 +353,7 @@ Assuming translation invariance, we can take expectation over brownian paths whi
 \end{align}
 
 
-\subsection{Derivation of ST PSD of Drifting Sensors} \label{sec:app_drfit}
+\subsection{Derivation of ST PSD of Drifting Sensors} \label{sec:app_drift}
 
 \begin{align}
     \rho(\xi,\tau) = \frac{1}{\sqrt{4\pi D|\tau|}} \exp\!\left( -\frac{\xi^2}{4D|\tau|} \right).
@@ -445,7 +449,7 @@ Given the constraint on output variance, need to propose some value of lambda, g
 
 
 % \begin{align}
-%     \mathcal{L} = \int_B \frac{dk\,d\omega}{(2\pi)^2} \left[ \frac{1}{2}\log \left(1+ \frac{v(k,\omega)\, C_z(k,\omega)}{\sigma_{in}^2 v(k,\omega) + \sigma_{out}^2} \right) - \lambda\,(1+\eta\omega^2) v(k) \big(C_z(k,\omega) + \sigma_{in}^2\big) \, \right]
+%     \mathcal{L} = \int \frac{dk\,d\omega}{(2\pi)^2} \left[ \frac{1}{2}\log \left(1+ \frac{v(k,\omega)\, C_z(k,\omega)}{\sigma_{in}^2 v(k,\omega) + \sigma_{out}^2} \right) - \lambda\,(1+\eta\omega^2) v(k) \big(C_z(k,\omega) + \sigma_{in}^2\big) \, \right]
 % \end{align}
 
 % Taking the derivative w.r.t. $v(k)$ and setting equal to zero gives the following solution 
@@ -457,14 +461,14 @@ Given the constraint on output variance, need to propose some value of lambda, g
 % With the temporal derivative penalty, the constrained optimization problem is
 % \begin{align}
 %     \max_{v\ge 0}\quad 
-%     &\frac{1}{2}\int_B\frac{dk\,d\omega}{(2\pi)^2}
+%     &\frac{1}{2}\int\frac{dk\,d\omega}{(2\pi)^2}
 %     \log\left(
 %     1+
 %     \frac{v(k,\omega)C_z(k,\omega)}
 %     {\sigma_{in}^2v(k,\omega)+\sigma_{out}^2}
 %     \right) \\
 %     \text{s.t.}\quad
-%     &\int_B\frac{dk\,d\omega}{(2\pi)^2}
+%     &\int\frac{dk\,d\omega}{(2\pi)^2}
 %     (1+\eta\omega^2)v(k,\omega)
 %     \big(C_z(k,\omega)+\sigma_{in}^2\big)
 %     =1 .

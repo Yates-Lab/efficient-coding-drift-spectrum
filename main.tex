@@ -89,8 +89,24 @@
 \begin{itemize}
     \item Eyes are never still. Saccades allow for looking at things without moving head. But even when head is still and eyes are fixating, movements persist.
     \item Such fixational movements have been shown to be a feature, not a bug. 
-    \item 
-    \item Efficient coding principles provide insight into function and design of early sensory systems
+    \item https://www.pnas.org/doi/pdf/10.1073/pnas.1412059112 show that fixational eye movements contribute produce more decorrelated RGC outputs. 
+    \item https://www.nature.com/articles/s41467-024-52304-7.pdf show that fixational drift enhances precision of neural representations. Ideal observer model on RGC outputs produced from simulated drift inputs. 
+    \item Ratham and Roorda paper shows this psychophysically, and models have been developed to explain results (alex anderson and olshausen).
+    \item Fixational drift isnt restricted to vertabrites. Insects also exhibit fixational drift (Fenk,.., Maimon). A steady eye is becoming the exception, not the rule. 
+    \item Meanwhile, circularly symmetric center-surround receptive fields are obiquitous in eraly visual systems. 
+    \item Natural scenes are highly correlated. Leading theory is that center surround receptive fields are bandpass in spatial freqeuncy and serve as whitening filters such that the output is decorrelated. Decorrleated representatoin is better as it has reduced reduancy (pair-wise statistiscs-wise) (barlow) thus neural systems forming a more energy efficient code (not represeting redundancies).
+    \item Kuang,..., Rucci reporte whiting effect of spatiotemporal powerspectrum. If signal is already whitened by fixational eyemovements, what are center-surround receptive fields doing? 
+\end{itemize}
+}
+\afbcomment{
+How we address this:
+\begin{itemize}
+    \item Derive analytical form of fixational drifting natual images. Present this information clearly and in one place. 
+    \item Show that it is parially whitened. 
+    \item Derive receptive fields that maximize information transfer subject to input and output noise, and contraints on output power and temporal response. 
+    \item Demonstrate that optimal RFs are spatially bandpass, and amplify singal in the part of the power spectrum that hasnt been whitened. 
+    \item Also optimize over drift diffusion constants and show that under realistic amounts of noise the optimal diffuision is consistent with previously measured values. 
+    \item Predictions about Diffusion as a function of noise, and show that, under fixed levels of diffusion, increased noise attenuates surround inhibition consistent with~\cite{atick1992does}.
 \end{itemize}
 }
 
@@ -171,7 +187,13 @@ for $D>0$.
 
 For the natural-image exponent $\beta=2$, the spatial-frequency dependence in the numerator of Eq.~\ref{eqn:drift} cancels. At a fixed nonzero temporal frequency, the spectrum is approximately flat below the spatial crossover $k=\sqrt{|\omega|/D}$ and falls as $k^{-4}$ above it. Likewise, at fixed spatial frequency, the temporal spectrum is approximately flat below $|\omega|=Dk^2$ and falls as $\omega^{-2}$ above it. Figure~\ref{fig:spectra-betas} shows this partial whitening and the dependence of the spectrum on the static-image exponent and diffusion constant.
 
-The fall of the power spectrum differs from previous reports of natural-movie statistics (Dong and Atick, Jun et al., ...). Dong and Atick analyzed camera footage and movie scenes and found a nonseparable power spectrum with power-law decay in spatial and temporal frequency. World-fixed camera footage has also been described by a separable spectrum, $C(k,\omega)\propto k^{-2}\omega^{-1.3}$ (Jun et al.). The drift model instead predicts a crossover that couples spatial and temporal frequency.
+The fall of the power spectrum differs from previous reports of natural-movie statistics. 
+Dong and Atick~\cite{dong1995} analyzed handycam footage they recorded as well as Hollywood movies and report that, in general, the spatiotemporal power spectrum is inseperable, but can be approximated as seperable under certain conditions.
+Spatial powerlaw structure in Hollywood movies also been reported by~\cite{billock2001fractal}.
+Fixed position camera~\cite{salisbury2016optimal} has recorded power law spatial frequency fall off.
+(also see ~\cite{jun2022efficient}).  Work within the efficient coding literature has derived theory of retinal function from spatiotemporal powerspectrums that are both powerlaw in space and time and seperable~\cite{ocko2018emergence,jun2022efficient}. 
+% (Dong and Atick, Jun et al., ...). Dong and Atick analyzed camera footage and movie scenes and found a nonseparable power spectrum with power-law decay in spatial and temporal frequency. World-fixed camera footage has also been described by a separable spectrum, $C(k,\omega)\propto k^{-2}\omega^{-1.3}$ (Jun et al.). The drift model instead predicts a crossover that couples spatial and temporal frequency.
+The powerspectrum of drifting natural images is neither powerlaw in spatial and temporal frequency, nor is it seperable.
 
 \begin{figure}[!tp]
     \centering
@@ -335,6 +357,7 @@ other notes
     % % \item (https://www.biorxiv.org/content/10.1101/2022.09.15.508164v1.full.pdf) finds that temporal RFs get faster with more light (less noise). Surrounds are maintained across light levels. centers get a bit smaller with more light. our results contradict the temporal RFs getting faster with more light. our results are consistent with surrounds that persist. our results contradict centers remaining same size across noise levels. That said, this is all rat. 
     % \item (Rucci \& Casile 2005) used model of cat X cells. rank 2 (center and surround) separable receptive fields that are biphasic in time (surround lagged a bit). fixational jitter strongly altered neuronal response. It decorrelated response.  They dont directly study the statistical structure of the inputs. 
     \item https://www.jneurosci.org/content/jneuro/34/38/12701.full.pdfm -- aytekin victor rucci 2014 -- The results of our study show that, during normal fixation, the spatiotemporal signals impinging on retinal receptors are already whitened within the range of temporal frequencies at which ganglion cells respond best. Whats our response? This whitening occurs before any neural processing takes place. "Thus, neural decorrelation, is not a viable theory to explain the filtering characteristics of receptive fields. contrast sensitivity functions of retinal ganglion cells further enhance high spatial frequencies above and beyond what is required for redundancy removal, leading to an enhancement of the luminance discontinuities in the scene. Critically, this edge enhancement happens in the temporal domain: it occurs in the synchronous firing of retinal ganglion cells, yielding a temporal code that takes advantage of the notion that synchronous responses tend to propagate more reliably than asynchronous ones."
+    \item https://www.pnas.org/doi/pdf/10.1073/pnas.1412059112 Decorrlation of retinal response to natural scenes by fixational eyemovements
 \end{itemize}
 }
 
